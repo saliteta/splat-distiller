@@ -78,7 +78,8 @@ a:hover {
 /* Teaser Section */
 .teaser {
   text-align: center;
-  margin: 20px 0;
+  width: 88%;
+  margin: 0 auto;
 }
 
 .teaser img,
