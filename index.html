@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="description"
+        content="Deformable Beta Splatting">
+  <meta name="keywords" content="Deformable Beta Splatting">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Deformable Beta Splatting</title>
+
+  <link rel="stylesheet" href="./static/css/bootstrap-4.4.1.css">
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.2/css/bulma.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <link rel="stylesheet" href="./static/css/style.css">
+  <link rel="stylesheet" href="./static/css/bulma-slider.min.css">
+
+
+  <link rel="stylesheet" href="./static/css/dics.original.css">
+  <script src="./static/js/event_handler.js"></script>
+  <script src="./static/js/dics.original.js"></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script defer src="./static/js/fontawesome.all.min.js"></script>
+  <script src="./static/js/bulma-carousel.min.js"></script>
+  <script src="./static/js/bulma-slider.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-3.0.1.min.js" charset="utf-8"></script>
+  <script src="./static/js/beta_vis.js"></script>
+  <script src="./static/js/sb_vis.js"></script>
+  <script src="./static/js/mcmc_vis.js"></script>
+</head>
+<body>
+  <div class="title">
+    <h1>Deformable Beta Splatting</h1>
+  </div>
+  <div class="authors is-size-5">
+    <p><strong>SIGGRAPH 2025</strong></p>    
+    <a href="https://rongliu-leo.github.io/">Rong Liu*</a>
+  
+    <a href="https://github.com/DylanWaken">Dylan Sun*</a>
+  
+    <a href="https://www.linkedin.com/in/meida-chen-938a265b/">Meida Chen</a>
+  
+    <a href="https://yuewang.xyz/">Yue Wang†</a>
+  
+    <a href="https://scholar.google.com/citations?user=JKWxGfsAAAAJ&hl=en">Andrew Feng†</a>
+  
+  </div>
+  <div class="authors is-size-5">
+    
+    <p>*Co-first authors &nbsp;&nbsp;&nbsp;&nbsp; †Co-advisors</p>
+    
+  </div>
+  <div class="affiliations is-size-5">
+    
+    <a href="https://usc.edu/" style="color:#990000;">University of Southern California</a>
+  
+  </div>
+  <div class="links">
+    
+    <span class="link-block">
+      <a href="https://arxiv.org/abs/2501.18630" class="external-link button is-rounded">
+        <span class="icon">
+          
+          
+            <i class="ai ai-arxiv"></i>
+          
+        </span>
+        <span>arXiv</span>
+      </a>
+    </span>
+  
+    <span class="link-block">
+      <a href="https://arxiv.org/pdf/2501.18630.pdf" class="external-link button is-rounded">
+        <span class="icon">
+          
+          
+            <i class="fas fa-file-pdf"></i>
+          
+        </span>
+        <span>Paper</span>
+      </a>
+    </span>
+  
+    <span class="link-block">
+      <a href="https://github.com/RongLiu-Leo/beta-splatting" class="external-link button is-rounded">
+        <span class="icon">
+          
+          
+            <i class="fab fa-github"></i>
+          
+        </span>
+        <span>Code</span>
+      </a>
+    </span>
+  
+    <span class="link-block">
+      <a href="" class="external-link button is-rounded">
+        <span class="icon">
+          
+          
+            <i class="fab fa-youtube"></i>
+          
+        </span>
+        <span>Video</span>
+      </a>
+    </span>
+  
+  </div>
+
+  <div class="teaser"> 
+    <img src="teaser.png" alt="Teaser Image">
+  </div>
+
+
+<div class="abstract">
+  <h2>Abstract</h2>
+  <p>
+    3D Gaussian Splatting (3DGS) has advanced radiance field reconstruction by enabling real-time rendering. However, its reliance on Gaussian kernels for geometry and low-order Spherical Harmonics (SH) for color encoding limits its ability to capture complex geometries and diverse colors. We introduce Deformable Beta Splatting (DBS), a deformable and compact approach that enhances both geometry and color representation. DBS replaces Gaussian kernels with deformable Beta Kernels, which offer bounded support and adaptive frequency control to capture fine geometric details with higher fidelity while achieving better memory efficiency. In addition, we extended the Beta Kernel to color encoding, which facilitates improved representation of diffuse and specular components, yielding superior results compared to SH-based methods. Furthermore, Unlike prior densification techniques that depend on Gaussian properties, we mathematically prove that adjusting regularized opacity alone ensures distribution-preserved Markov chain Monte Carlo (MCMC), independent of the splatting kernel type. Experimental results demonstrate that DBS achieves state-of-the-art visual quality while utilizing only 45% of the parameters and rendering 1.5x faster than 3DGS-based methods. Notably, for the first time, splatting-based methods outperform state-of-the-art Neural Radiance Fields, highlighting the superior performance and efficiency of DBS for real-time radiance field rendering.
+  </p>
+</div>
+
+<section class="section">
+  <h2>Beta Kernel</h2>
+  <p>Beta Kernel adapts its shape to capture fine geometric and texture details. Negative b generates flatter surface but sharper cutoffs for learning solid support and sharp geometry, while positive b generates sharper peaks for learning high frequency details. When b=0, the beta kernel is almost identical to Gaussian Kernel.</p>
+  <p><strong>Drag the slider to see how Beta Kernel deforms.</strong></p>
+  <div class="has-text-centered">
+    <p style=" display: flex;
+      justify-content: center;
+      align-items: center;">b = 0
+    </p>
+    <input class="slider is-fullwidth is-large is-info is-danger" id="interpolation-slider" step="0.1" min="-5" max="5" value="0" type="range" style="margin-top: 0px;margin-bottom: 0px;" oninput="this.previousElementSibling.textContent = 'b = ' + (this.value)">
+  </div>
+  <div style="display: flex; flex-wrap: nowrap; gap: 0px;">
+    <!-- 2D Plot -->
+    <div id="plot" style="width: 100%;"></div>
+    <!-- 3D Surface Plot -->
+    <div id="plot3d" style="width: 100%;"></div>
+  </div>
+</section>
+
+<section class="section">
+  <h2>Geometry Decomposition</h2>
+  <p>The Beta Kernel's parameter b intrinsically controls the geometry frequency representation of each primitive. Lower b values correspond to lower-frequency primitives, which predominantly capture the fundamental geometric structures of the scene. Conversely, higher b values encapsulate higher-frequency details, such as textures and fine surface variations.
+
+    By setting a mask based on the b parameter, we can selectively isolate primitives based on their frequency contributions. For example, we can also do a simple binary split based on a threshold (e.g., the mean of b values across all primitives). Primitives with 
+    b below the threshold primarily represent the scene's structures,  with primitives of b above the threshold provides texture details.
+  </p>
+  <p><strong>Click the video box to play or pause, and drag the sliders to compare them.</strong></p>
+  <br>
+  <ul class="nav nav-tabs nav-fill nav-justified" id="geometry-decomposition">
+      <li class="nav-item">
+        <a class="nav-link active" onclick="geometrySceneEvent(0)">Bicycle</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" onclick="geometrySceneEvent(1)">Treehill</a>
+      </li>
+  </ul>
+  <div class="b-dics geometry">
+    <video muted loop src="./static/videos/bicycle/low.mp4" alt="Structure"></video>
+    <video muted loop src="./static/videos/bicycle/RGB.mp4" alt="Full"></video>
+    <video muted loop src="./static/videos/bicycle/high.mp4" alt="Detail"></video>
+  </div>
+</section>
+
+<section class="section">
+  <h2>Spherical Beta</h2>
+  <p>Spherical Beta merges ambient and diffuse into a single base/diffuse color, then directly models specular lobes via learnable bounded Beta kernels—eliminating any reliance on surface normals or lighting source directions.</p>
+  <p><strong>Drag the slider θ and φ to control the reflection direction and b to control reflection specularity.</strong></p>
+  <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+    <div class="has-text-centered" style="flex: 1 1 0;">
+      <p style="display: flex; justify-content: center; align-items: center;">b = 0</p>
+      <input class="slider is-fullwidth is-large is-info is-danger" id="b-slider" step="0.1" min="-5" max="5" value="0" type="range" style="margin: 0px;"  oninput="this.previousElementSibling.textContent = 'b = ' + (this.value)">
+    </div>
+    <div class="has-text-centered" style="flex: 1 1 0;">
+      <p style="display: flex; justify-content: center; align-items: center;">θ = 1</p>
+      <input class="slider is-fullwidth is-large is-info is-danger" id="theta-slider" step="0.01" min="0" max="3.14" value="1" type="range" style="margin: 0px;" oninput="this.previousElementSibling.textContent = 'θ = ' + (this.value)">
+    </div>
+    <div class="has-text-centered" style="flex: 1 1 0;">
+      <p style="display: flex; justify-content: center; align-items: center;">φ = 1</p>
+      <input class="slider is-fullwidth is-large is-info is-danger" id="phi-slider" step="0.01" min="0" max="6.28" value="1" type="range" style="margin: 0px;" oninput="this.previousElementSibling.textContent = 'φ = ' + (this.value)">
+    </div>
+  </div>
+  <div id="plotsb" style="width: 100%; height: 600px;"></div>
+</section>
+
+<section class="section">
+  <h2>Light Decomposition</h2>
+  <p>The diffuse component is obtained by using only the base color of Spherical Beta. Conversely, enabling only the specular component produces view‑dependent specular lighting effects. For comparison with 3DGS, the diffuse color is restricted to the zero‑degree spherical harmonic, while specular effects employ non‑zero degrees.</p>
+  <p><strong>Click the video box to play or pause, and drag the sliders to compare them.</strong></p>
+  <br>
+  <ul class="nav nav-tabs nav-fill nav-justified" id="scene-selection">
+      <li class="nav-item">
+        <a class="nav-link active" onclick="sceneEvent(0)">Counter</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" onclick="sceneEvent(1)">Garden</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" onclick="sceneEvent(2)">Kitchen</a>
+      </li>
+  </ul>
+  <div class="b-dics light">
+    <video muted loop src="./static/videos/counter/gs/Specular.mp4" alt="3D GS"></video>
+    <video muted loop src="./static/videos/counter/bs/Specular.mp4" alt="Ours"></video>
+  </div>
+  <ul class="nav nav-tabs nav-fill nav-justified" id="light-decomposition" style="border-width: 0px 0px 1px 0px;">
+    <li class="nav-item" style="border-radius: 0px 0px 10px 10px;">
+      <a class="nav-link" style="border-radius: 0px 0px 10px 10px;" onclick="lightSceneEvent(0)">Diffuse</a>
+    </li>
+    <li class="nav-item" style="border-radius: 0px 0px 10px 10px;">
+      <a class="nav-link" style="border-radius: 0px 0px 10px 10px;" onclick="lightSceneEvent(1)">Full</a>
+    </li>
+    <li class="nav-item" style="border-radius: 0px 0px 10px 10px;">
+      <a class="nav-link active" style="border-radius: 0px 0px 10px 10px;" onclick="lightSceneEvent(2)">Specular</a>
+    </li>
+  </ul>
+</section>
+
+<section class="section">
+  <h2>Kernel-Agnostic MCMC</h2>
+  <p>Naively cloning primitives produces overly opaque renderings. Each densification step increases the loss and misleads the optimizer, resulting in suboptimal results. Furthermore, existing densification strategies depend on Gaussian-function properties and cannot be directly applied to arbitrary kernels. Kernel-Agnostic MCMC shows that regularizing opacity alone guarantees distribution-preserved densification, regardless of how many primitives densified or which splatting kernel is chosen.</p>
+  <p><strong>First, drag the b and N sliders to compare the original and densified distributions and measure the error magnitude. Then lower the opacity slider and adjust b and N again to see if the gaps and errors are eliminated.</strong></p>
+  <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+    <div class="has-text-centered" style="flex: 1 1 0;">
+      <p style="display: flex; justify-content: center; align-items: center;">b = 0</p>
+      <input class="slider is-fullwidth is-large is-info is-danger" id="b-mcmc" step="0.1" min="-5" max="5" value="0" type="range" style="margin: 0px;"  oninput="this.previousElementSibling.textContent = 'b = ' + (this.value)">
+    </div>
+    <div class="has-text-centered" style="flex: 1 1 0;">
+      <p style="display: flex; justify-content: center; align-items: center;">opacity = 1</p>
+      <input class="slider is-fullwidth is-large is-info is-danger" id="o-mcmc" step="0.01" min="0" max="1" value="1" type="range" style="margin: 0px;" oninput="this.previousElementSibling.textContent = 'opacity = ' + (this.value)">
+    </div>
+    <div class="has-text-centered" style="flex: 1 1 0;">
+      <p style="display: flex; justify-content: center; align-items: center;">N = 6</p>
+      <input class="slider is-fullwidth is-large is-info is-danger" id="N-mcmc" step="1" min="2" max="10" value="6" type="range" style="margin: 0px;" oninput="this.previousElementSibling.textContent = 'N = ' + (this.value)">
+    </div>
+  </div>
+  <div style="display: flex; flex-wrap: nowrap; gap: 0px;">
+    <div id="plotmcmc" style="width: 100%;"></div>
+    <div id="plotmcmc_splat" style="width: 100%;"></div>
+  </div>
+</section>
+
+<div class="BibTeX">
+  <h2>BibTeX</h2>
+  <pre><code class="language-bibtex">@misc{liu2025deformablebetasplatting,
+    title={ Deformable Beta Splatting },
+    author={ Rong Liu and Dylan Sun and Meida Chen and Yue Wang and Andrew Feng },
+    year={ 2025 },
+    eprint={ 2501.18630 },
+    archivePrefix={arXiv},
+    primaryClass={cs.CV},
+    url={ https://arxiv.org/abs/2501.18630 }
+}
+</code></pre>
+</div>
+
+
+<footer class="footer">
+  <h2>Acknowledgments</h2>
+  <p>
+    The authors would like to thank our primary sponsors of this research: Mr. Clayton Burford of the Battlespace Content Creation
+    (BCC) team at Simulation and Training Technology Center (STTC).
+    This work is supported by University Affiliated Research Center
+    (UARC) award W911NF-14-D-0005, a Toyota Research Institute University 2.0 program, a gift fund from Dolby, and a gift fund from
+    Google DeepMind. Statements and opinions expressed and content
+    included do not necessarily reflect the position or the policy of the
+    Government, and no official endorsement should be inferred.
+  </p>
+  <p>
+    This website is adapted and modified from <a href="https://github.com/RongLiu-Leo/arxsite">ArxSite</a>.
+    Feel free to use the website <a href="https://github.com/RongLiu-Leo/beta-splatting/tree/website">source code</a>, but please kindly remember to include a link back to Deformable Beta Splatting <a href="https://rongliu-leo.github.io/beta-splatting/">website</a>.
+  </p>
+</footer>
+
+</body>
+</html>
