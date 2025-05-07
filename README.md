@@ -1,6 +1,6 @@
 # Deformable Beta Splatting
 
-This is the repository that contains source code for the [Deformable Beta Splatting](https://rongliu-leo.github.io/beta-splatting/) website, based on [Nerfies](https://github.com/nerfies/nerfies.github.io), [Neuralangelo](https://research.nvidia.com/labs/dir/neuralangelo/) and [AtomGS](https://rongliu-leo.github.io/AtomGS/).
+This is the repository that contains source code for the [Deformable Beta Splatting](https://rongliu-leo.github.io/beta-splatting/) website, based on [Nerfies](https://github.com/nerfies/nerfies.github.io), [Neuralangelo](https://research.nvidia.com/labs/dir/neuralangelo/), [AtomGS](https://rongliu-leo.github.io/AtomGS/), and [ArxSite](https://github.com/RongLiu-Leo/arxsite).
 
 If you find Deformable Beta Splatting useful for your work please cite:
 ```bibtex
