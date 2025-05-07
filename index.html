@@ -34,7 +34,7 @@
     <h1>Deformable Beta Splatting</h1>
   </div>
   <div class="authors is-size-5">
-    <p><strong>SIGGRAPH 2025</strong></p>    
+    <div><b>SIGGRAPH 2025</b></div>   
     <a href="https://rongliu-leo.github.io/">Rong Liu*</a>
   
     <a href="https://github.com/DylanWaken">Dylan Sun*</a>
@@ -123,7 +123,7 @@
 <section class="section">
   <h2>Beta Kernel</h2>
   <p>Beta Kernel adapts its shape to capture fine geometric and texture details. Negative b generates flatter surface but sharper cutoffs for learning solid support and sharp geometry, while positive b generates sharper peaks for learning high frequency details. When b=0, the beta kernel is almost identical to Gaussian Kernel.</p>
-  <p><strong>Drag the slider to see how Beta Kernel deforms.</strong></p>
+  <b>Drag the slider to see how Beta Kernel deforms.</b>
   <div class="has-text-centered">
     <p style=" display: flex;
       justify-content: center;
@@ -146,7 +146,7 @@
     By setting a mask based on the b parameter, we can selectively isolate primitives based on their frequency contributions. For example, we can also do a simple binary split based on a threshold (e.g., the mean of b values across all primitives). Primitives with 
     b below the threshold primarily represent the scene's structures,  with primitives of b above the threshold provides texture details.
   </p>
-  <p><strong>Click the video box to play or pause, and drag the sliders to compare them.</strong></p>
+  <b>Click the video box to play or pause, and drag the sliders to compare them.</b>
   <br>
   <ul class="nav nav-tabs nav-fill nav-justified" id="geometry-decomposition">
       <li class="nav-item">
@@ -166,7 +166,7 @@
 <section class="section">
   <h2>Spherical Beta</h2>
   <p>Spherical Beta merges ambient and diffuse into a single base/diffuse color, then directly models specular lobes via learnable bounded Beta kernels—eliminating any reliance on surface normals or lighting source directions.</p>
-  <p><strong>Drag the slider θ and φ to control the reflection direction and b to control reflection specularity.</strong></p>
+  <b>Drag the slider θ and φ to control the reflection direction and b to control reflection specularity.</b>
   <div style="display: flex; gap: 20px; flex-wrap: wrap;">
     <div class="has-text-centered" style="flex: 1 1 0;">
       <p style="display: flex; justify-content: center; align-items: center;">b = 0</p>
@@ -187,7 +187,7 @@
 <section class="section">
   <h2>Light Decomposition</h2>
   <p>The diffuse component is obtained by using only the base color of Spherical Beta. Conversely, enabling only the specular component produces view‑dependent specular lighting effects. For comparison with 3DGS, the diffuse color is restricted to the zero‑degree spherical harmonic, while specular effects employ non‑zero degrees.</p>
-  <p><strong>Click the video box to play or pause, and drag the sliders to compare them.</strong></p>
+  <b>Click the video box to play or pause, and drag the sliders to compare them.</b>
   <br>
   <ul class="nav nav-tabs nav-fill nav-justified" id="scene-selection">
       <li class="nav-item">
@@ -220,7 +220,7 @@
 <section class="section">
   <h2>Kernel-Agnostic MCMC</h2>
   <p>Naively cloning primitives produces overly opaque renderings. Each densification step increases the loss and misleads the optimizer, resulting in suboptimal results. Furthermore, existing densification strategies depend on Gaussian-function properties and cannot be directly applied to arbitrary kernels. Kernel-Agnostic MCMC shows that regularizing opacity alone guarantees distribution-preserved densification, regardless of how many primitives densified or which splatting kernel is chosen.</p>
-  <p><strong>First, drag the b and N sliders to compare the original and densified distributions and measure the error magnitude. Then lower the opacity slider and adjust b and N again to see if the gaps and errors are eliminated.</strong></p>
+  <b>First, drag the b and N sliders to compare the original and densified distributions and measure the error magnitude. Then lower the opacity slider and adjust b and N again to see if the gaps and errors are eliminated.</b>
   <div style="display: flex; gap: 20px; flex-wrap: wrap;">
     <div class="has-text-centered" style="flex: 1 1 0;">
       <p style="display: flex; justify-content: center; align-items: center;">b = 0</p>
