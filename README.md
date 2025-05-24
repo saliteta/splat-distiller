@@ -95,3 +95,8 @@ python feature_extractor.py -s <location> --model <model>
   Select the 2D foundation model from the list: dino16, dinov2, clip, maskclip, vit, resnet50.
 </details>
 <br>
+
+## TO DO
+
+- Adding training guidance
+- Loading and so on
