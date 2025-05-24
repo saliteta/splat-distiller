@@ -1,0 +1,13 @@
+*.pyc
+.vscode
+output
+build
+*.egg-info
+tensorboard_3d
+screenshots
+*.txt
+/eval
+outputs
+data
+experiment
+results
