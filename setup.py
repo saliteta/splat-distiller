@@ -16,7 +16,6 @@ setup(
         "fused-ssim @ git+https://github.com/rahul-goel/fused-ssim@1272e21a282342e89537159e4bad508b19b34157",
         "FeatUp @ git+https://github.com/mhamilton723/FeatUp.git@main",
         "CLIP @ git+https://github.com/mhamilton723/CLIP.git@main",
-        
         # PyPI dependencies
         "viser",
         "nerfview",
@@ -33,7 +32,7 @@ setup(
         "pyyaml",
         "matplotlib",
         "plyfile",
-        "setuptools==72.1.0"
+        "setuptools==72.1.0",
     ],
     packages=find_packages(),
     include_package_data=True,
