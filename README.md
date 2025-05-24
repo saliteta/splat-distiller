@@ -28,7 +28,7 @@ This project is built on top of the [gaussian-splatting](https://github.com/grap
 
 ### Processing your own Scenes
 
-The COLMAP loaders expect the following dataset structure in the source path location:
+The project expect the following dataset structure in the source path location:
 
 ```
 <location>
@@ -46,8 +46,7 @@ The COLMAP loaders expect the following dataset structure in the source path loc
         |---images.bin
         |---points3D.bin
 ```
-
-For rasterization, the camera models must be either a SIMPLE_PINHOLE or PINHOLE camera. We provide a converter script ```convert.py```, to extract undistorted images and SfM information from input images. Optionally, you can use ImageMagick to resize the undistorted images. This rescaling is similar to MipNeRF360, i.e., it creates images with 1/2, 1/4 and 1/8 the original resolution in corresponding folders. To use them, please first install a recent version of COLMAP (ideally CUDA-powered) and ImageMagick. Put the images you want to use in a directory ```<location>/input```.
+To prepare the required dataset, please put the images you want to use in a directory ```<location>/input```.
 ```
 <location>
 |---input
@@ -55,9 +54,10 @@ For rasterization, the camera models must be either a SIMPLE_PINHOLE or PINHOLE 
     |---<image 1>
     |---...
 ```
- If you have COLMAP and ImageMagick on your system path, you can simply run 
+Then
+#### 1. Calibrate images via COLMAP
 ```shell
-python convert.py -s <location> [--resize] #If not resizing, ImageMagick is not needed
+python convert.py -s <location>
 ```
 
 <details>
@@ -77,5 +77,21 @@ python convert.py -s <location> [--resize] #If not resizing, ImageMagick is not 
   Path to the COLMAP executable (```.bat``` on Windows).
   #### --magick_executable
   Path to the ImageMagick executable.
+</details>
+<br>
+
+#### 2. Extract features via FeatUp
+
+```shell
+python feature_extractor.py -s <location> --model <model>
+```
+
+<details>
+<summary><span style="font-weight: bold;">Command Line Arguments for feature_extractor.py</span></summary>
+
+  #### --source_path / -s
+  Location of the inputs.
+  #### --model 
+  Select the 2D foundation model from the list: dino16, dinov2, clip, maskclip, vit, resnet50.
 </details>
 <br>
