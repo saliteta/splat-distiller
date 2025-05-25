@@ -13,7 +13,7 @@ install_requires = [
         "nerfview",
         "imageio[ffmpeg]",
         "ninja",
-        "numpy",
+        "numpy<2.0.0",
         "scikit-learn",
         "tqdm",
         "torchmetrics[image]",
@@ -30,6 +30,7 @@ install_requires = [
         "rich>=12",
         "torch",
         "typing_extensions; python_version<'3.8'",
+        "splines",
 ]
 class BuildSubmodule(Command):
     """Custom command to install the submodule located in the 'submodule' folder."""
