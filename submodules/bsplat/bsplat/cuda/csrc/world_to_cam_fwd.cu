@@ -8,7 +8,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
-namespace gsplat {
+namespace bsplat {
 
 namespace cg = cooperative_groups;
 
@@ -61,7 +61,7 @@ __global__ void world_to_cam_fwd_kernel(
         const vec3<OpT> mean = glm::make_vec3(means);
         pos_world_to_cam(R, t, mean, mean_c);
         means_c += idx * 3;
-        GSPLAT_PRAGMA_UNROLL
+        BSPLAT_PRAGMA_UNROLL
         for (uint32_t i = 0; i < 3; i++) { // rows
             means_c[i] = T(mean_c[i]);
         }
@@ -73,9 +73,9 @@ __global__ void world_to_cam_fwd_kernel(
         const mat3<OpT> covar = glm::make_mat3(covars);
         covar_world_to_cam<OpT>(R, covar, covar_c);
         covars_c += idx * 9;
-        GSPLAT_PRAGMA_UNROLL
+        BSPLAT_PRAGMA_UNROLL
         for (uint32_t i = 0; i < 3; i++) { // rows
-            GSPLAT_PRAGMA_UNROLL
+            BSPLAT_PRAGMA_UNROLL
             for (uint32_t j = 0; j < 3; j++) { // cols
                 covars_c[i * 3 + j] = T(covar_c[j][i]);
             }
@@ -88,10 +88,10 @@ std::tuple<torch::Tensor, torch::Tensor> world_to_cam_fwd_tensor(
     const torch::Tensor &covars,  // [N, 3, 3]
     const torch::Tensor &viewmats // [C, 4, 4]
 ) {
-    GSPLAT_DEVICE_GUARD(means);
-    GSPLAT_CHECK_INPUT(means);
-    GSPLAT_CHECK_INPUT(covars);
-    GSPLAT_CHECK_INPUT(viewmats);
+    BSPLAT_DEVICE_GUARD(means);
+    BSPLAT_CHECK_INPUT(means);
+    BSPLAT_CHECK_INPUT(covars);
+    BSPLAT_CHECK_INPUT(viewmats);
 
     uint32_t N = means.size(0);
     uint32_t C = viewmats.size(0);
@@ -108,8 +108,8 @@ std::tuple<torch::Tensor, torch::Tensor> world_to_cam_fwd_tensor(
             "world_to_cam_bwd",
             [&]() {
                 world_to_cam_fwd_kernel<scalar_t>
-                    <<<(C * N + GSPLAT_N_THREADS - 1) / GSPLAT_N_THREADS,
-                       GSPLAT_N_THREADS,
+                    <<<(C * N + BSPLAT_N_THREADS - 1) / BSPLAT_N_THREADS,
+                       BSPLAT_N_THREADS,
                        0,
                        stream>>>(
                         C,
@@ -126,4 +126,4 @@ std::tuple<torch::Tensor, torch::Tensor> world_to_cam_fwd_tensor(
     return std::make_tuple(means_c, covars_c);
 }
 
-} // namespace gsplat
+} // namespace bsplat

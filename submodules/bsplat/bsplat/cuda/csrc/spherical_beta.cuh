@@ -1,11 +1,11 @@
-#ifndef GSPLAT_SPHERICAL_GAUSSIAN_CUH
-#define GSPLAT_SPHERICAL_GAUSSIAN_CUH
+#ifndef BSPLAT_SPHERICAL_GAUSSIAN_CUH
+#define BSPLAT_SPHERICAL_GAUSSIAN_CUH
 
 #include "bindings.h"
 #include "types.cuh"
 #include "utils.cuh"
 
-namespace gsplat {
+namespace bsplat {
     /**
      * @brief The dot product formulation of spherical gaussians:
      *

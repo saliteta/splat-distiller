@@ -5,7 +5,7 @@
 #include <cub/cub.cuh>
 #include <cuda_runtime.h>
 
-namespace gsplat {
+namespace bsplat {
 
 namespace cg = cooperative_groups;
 
@@ -114,7 +114,7 @@ __global__ void rasterize_to_pixels_bwd_kernel(
 
     // df/d_out for this pixel
     S v_render_c[COLOR_DIM];
-    GSPLAT_PRAGMA_UNROLL
+    BSPLAT_PRAGMA_UNROLL
     for (uint32_t k = 0; k < COLOR_DIM; ++k) {
         v_render_c[k] = v_render_colors[pix_id * COLOR_DIM + k];
     }
@@ -146,7 +146,7 @@ __global__ void rasterize_to_pixels_bwd_kernel(
             const S beta = betas[g];
             xy_opacity_batch[tr] = {xy.x, xy.y, opac, beta};
             conic_batch[tr] = conics[g];
-            GSPLAT_PRAGMA_UNROLL
+            BSPLAT_PRAGMA_UNROLL
             for (uint32_t k = 0; k < COLOR_DIM; ++k) {
                 rgbs_batch[tr * COLOR_DIM + k] = colors[g * COLOR_DIM + k];
             }
@@ -205,7 +205,7 @@ __global__ void rasterize_to_pixels_bwd_kernel(
                 T *= ra;
                 // update v_rgb for this gaussian
                 const S fac = alpha * T;
-                GSPLAT_PRAGMA_UNROLL
+                BSPLAT_PRAGMA_UNROLL
                 for (uint32_t k = 0; k < COLOR_DIM; ++k) {
                     v_rgb_local[k] = fac * v_render_c[k];
                 }
@@ -221,7 +221,7 @@ __global__ void rasterize_to_pixels_bwd_kernel(
                 // contribution from background pixel
                 if (backgrounds != nullptr) {
                     S accum = 0.f;
-                    GSPLAT_PRAGMA_UNROLL
+                    BSPLAT_PRAGMA_UNROLL
                     for (uint32_t k = 0; k < COLOR_DIM; ++k) {
                         accum += backgrounds[k] * v_render_c[k];
                     }
@@ -246,7 +246,7 @@ __global__ void rasterize_to_pixels_bwd_kernel(
                     v_beta_local = v_alpha * opac * __powf(1.f - sigma, beta) * __logf(1.f - sigma);
                 }
 
-                GSPLAT_PRAGMA_UNROLL
+                BSPLAT_PRAGMA_UNROLL
                 for (uint32_t k = 0; k < COLOR_DIM; ++k) {
                     buffer[k] += rgbs_batch[t * COLOR_DIM + k] * fac;
                 }
@@ -262,7 +262,7 @@ __global__ void rasterize_to_pixels_bwd_kernel(
             if (warp.thread_rank() == 0) {
                 int32_t g = id_batch[t]; // flatten index in [C * N] or [nnz]
                 S *v_rgb_ptr = (S *)(v_colors) + COLOR_DIM * g;
-                GSPLAT_PRAGMA_UNROLL
+                BSPLAT_PRAGMA_UNROLL
                 for (uint32_t k = 0; k < COLOR_DIM; ++k) {
                     gpuAtomicAdd(v_rgb_ptr + k, v_rgb_local[k]);
                 }
@@ -323,23 +323,23 @@ call_kernel_with_dim(
     bool absgrad
 ) {
 
-    GSPLAT_DEVICE_GUARD(means2d);
-    GSPLAT_CHECK_INPUT(means2d);
-    GSPLAT_CHECK_INPUT(conics);
-    GSPLAT_CHECK_INPUT(colors);
-    GSPLAT_CHECK_INPUT(opacities);
-    GSPLAT_CHECK_INPUT(betas);
-    GSPLAT_CHECK_INPUT(tile_offsets);
-    GSPLAT_CHECK_INPUT(flatten_ids);
-    GSPLAT_CHECK_INPUT(render_alphas);
-    GSPLAT_CHECK_INPUT(last_ids);
-    GSPLAT_CHECK_INPUT(v_render_colors);
-    GSPLAT_CHECK_INPUT(v_render_alphas);
+    BSPLAT_DEVICE_GUARD(means2d);
+    BSPLAT_CHECK_INPUT(means2d);
+    BSPLAT_CHECK_INPUT(conics);
+    BSPLAT_CHECK_INPUT(colors);
+    BSPLAT_CHECK_INPUT(opacities);
+    BSPLAT_CHECK_INPUT(betas);
+    BSPLAT_CHECK_INPUT(tile_offsets);
+    BSPLAT_CHECK_INPUT(flatten_ids);
+    BSPLAT_CHECK_INPUT(render_alphas);
+    BSPLAT_CHECK_INPUT(last_ids);
+    BSPLAT_CHECK_INPUT(v_render_colors);
+    BSPLAT_CHECK_INPUT(v_render_alphas);
     if (backgrounds.has_value()) {
-        GSPLAT_CHECK_INPUT(backgrounds.value());
+        BSPLAT_CHECK_INPUT(backgrounds.value());
     }
     if (masks.has_value()) {
-        GSPLAT_CHECK_INPUT(masks.value());
+        BSPLAT_CHECK_INPUT(masks.value());
     }
 
     bool packed = means2d.dim() == 2;
@@ -459,7 +459,7 @@ rasterize_to_pixels_bwd_tensor(
     bool absgrad
 ) {
 
-    GSPLAT_CHECK_INPUT(colors);
+    BSPLAT_CHECK_INPUT(colors);
     uint32_t COLOR_DIM = colors.size(-1);
 
 #define __GS__CALL_(N)                                                         \
@@ -509,4 +509,4 @@ rasterize_to_pixels_bwd_tensor(
     }
 }
 
-} // namespace gsplat
+} // namespace bsplat

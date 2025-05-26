@@ -655,7 +655,7 @@ def _rasterization(
     """A version of rasterization() that utilies on PyTorch's autograd.
 
     .. note::
-        This function still relies on gsplat's CUDA backend for some computation, but the
+        This function still relies on bsplat's CUDA backend for some computation, but the
         entire differentiable graph is on of PyTorch (and nerfacc) so could use Pytorch's
         autograd for backpropagation.
 
@@ -667,7 +667,7 @@ def _rasterization(
         Compared to rasterization(), this function does not support some arguments such as
         `packed`, `sparse_grad` and `absgrad`.
     """
-    from gsplat.cuda._torch_impl import (
+    from bsplat.cuda._torch_impl import (
         _fully_fused_projection,
         _quat_scale_to_covar_preci,
         _rasterize_to_pixels,

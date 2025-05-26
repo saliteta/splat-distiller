@@ -8,7 +8,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
-namespace gsplat {
+namespace bsplat {
 
 namespace cg = cooperative_groups;
 
@@ -93,15 +93,15 @@ __global__ void proj_bwd_kernel(
     }
 
     // write to outputs: glm is column-major but we want row-major
-    GSPLAT_PRAGMA_UNROLL
+    BSPLAT_PRAGMA_UNROLL
     for (uint32_t i = 0; i < 3; i++) { // rows
-        GSPLAT_PRAGMA_UNROLL
+        BSPLAT_PRAGMA_UNROLL
         for (uint32_t j = 0; j < 3; j++) { // cols
             v_covars[i * 3 + j] = T(v_covar[j][i]);
         }
     }
 
-    GSPLAT_PRAGMA_UNROLL
+    BSPLAT_PRAGMA_UNROLL
     for (uint32_t i = 0; i < 3; i++) {
         v_means[i] = T(v_mean[i]);
     }
@@ -117,12 +117,12 @@ std::tuple<torch::Tensor, torch::Tensor> proj_bwd_tensor(
     const torch::Tensor &v_means2d, // [C, N, 2]
     const torch::Tensor &v_covars2d // [C, N, 2, 2]
 ) {
-    GSPLAT_DEVICE_GUARD(means);
-    GSPLAT_CHECK_INPUT(means);
-    GSPLAT_CHECK_INPUT(covars);
-    GSPLAT_CHECK_INPUT(Ks);
-    GSPLAT_CHECK_INPUT(v_means2d);
-    GSPLAT_CHECK_INPUT(v_covars2d);
+    BSPLAT_DEVICE_GUARD(means);
+    BSPLAT_CHECK_INPUT(means);
+    BSPLAT_CHECK_INPUT(covars);
+    BSPLAT_CHECK_INPUT(Ks);
+    BSPLAT_CHECK_INPUT(v_means2d);
+    BSPLAT_CHECK_INPUT(v_covars2d);
 
     uint32_t C = means.size(0);
     uint32_t N = means.size(1);
@@ -139,8 +139,8 @@ std::tuple<torch::Tensor, torch::Tensor> proj_bwd_tensor(
             "proj_bwd",
             [&]() {
                 proj_bwd_kernel<scalar_t>
-                    <<<(C * N + GSPLAT_N_THREADS - 1) / GSPLAT_N_THREADS,
-                       GSPLAT_N_THREADS,
+                    <<<(C * N + BSPLAT_N_THREADS - 1) / BSPLAT_N_THREADS,
+                       BSPLAT_N_THREADS,
                        0,
                        stream>>>(
                         C,
@@ -162,4 +162,4 @@ std::tuple<torch::Tensor, torch::Tensor> proj_bwd_tensor(
     return std::make_tuple(v_means, v_covars);
 }
 
-} // namespace gsplat
+} // namespace bsplat

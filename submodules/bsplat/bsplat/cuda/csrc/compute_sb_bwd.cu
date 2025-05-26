@@ -4,7 +4,7 @@
 #include <cooperative_groups.h>
 #include <cuda_runtime.h>
 #include <iostream>
-namespace gsplat {
+namespace bsplat {
 
 namespace cg = cooperative_groups;
 
@@ -55,13 +55,13 @@ namespace cg = cooperative_groups;
         const torch::Tensor &v_colors,           // [..., 3]
         bool compute_v_dirs
     ) {
-        GSPLAT_DEVICE_GUARD(dirs);
-        GSPLAT_CHECK_INPUT(dirs);
-        GSPLAT_CHECK_INPUT(c0);
-        GSPLAT_CHECK_INPUT(coeffs);
-        GSPLAT_CHECK_INPUT(v_colors);
+        BSPLAT_DEVICE_GUARD(dirs);
+        BSPLAT_CHECK_INPUT(dirs);
+        BSPLAT_CHECK_INPUT(c0);
+        BSPLAT_CHECK_INPUT(coeffs);
+        BSPLAT_CHECK_INPUT(v_colors);
         if (masks.has_value()) {
-            GSPLAT_CHECK_INPUT(masks.value());
+            BSPLAT_CHECK_INPUT(masks.value());
         }
         TORCH_CHECK(v_colors.size(-1) == 3, "v_colors must have last dimension 3");
         TORCH_CHECK(c0.size(-1) == 3, "c0 must have last dimension 3");
@@ -77,8 +77,8 @@ namespace cg = cooperative_groups;
         }
         if (N) {
             compute_sh_bwd_kernel<float>
-                <<<(N + GSPLAT_N_THREADS - 1) / GSPLAT_N_THREADS,
-                GSPLAT_N_THREADS>>>(
+                <<<(N + BSPLAT_N_THREADS - 1) / BSPLAT_N_THREADS,
+                BSPLAT_N_THREADS>>>(
                     N,
                     num_primitives,
                     active_primitives,

@@ -5,7 +5,7 @@
 #include <cub/cub.cuh>
 #include <cuda_runtime.h>
 
-namespace gsplat {
+namespace bsplat {
 
 namespace cg = cooperative_groups;
 
@@ -117,15 +117,15 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> isect_tiles_tensor(
     const bool sort,
     const bool double_buffer
 ) {
-    GSPLAT_DEVICE_GUARD(means2d);
-    GSPLAT_CHECK_INPUT(means2d);
-    GSPLAT_CHECK_INPUT(radii);
-    GSPLAT_CHECK_INPUT(depths);
+    BSPLAT_DEVICE_GUARD(means2d);
+    BSPLAT_CHECK_INPUT(means2d);
+    BSPLAT_CHECK_INPUT(radii);
+    BSPLAT_CHECK_INPUT(depths);
     if (camera_ids.has_value()) {
-        GSPLAT_CHECK_INPUT(camera_ids.value());
+        BSPLAT_CHECK_INPUT(camera_ids.value());
     }
     if (primitive_ids.has_value()) {
-        GSPLAT_CHECK_INPUT(primitive_ids.value());
+        BSPLAT_CHECK_INPUT(primitive_ids.value());
     }
     bool packed = means2d.dim() == 2;
 
@@ -173,8 +173,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> isect_tiles_tensor(
             "isect_tiles_total_elems",
             [&]() {
                 isect_tiles<<<
-                    (total_elems + GSPLAT_N_THREADS - 1) / GSPLAT_N_THREADS,
-                    GSPLAT_N_THREADS,
+                    (total_elems + BSPLAT_N_THREADS - 1) / BSPLAT_N_THREADS,
+                    BSPLAT_N_THREADS,
                     0,
                     stream>>>(
                     packed,
@@ -216,8 +216,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> isect_tiles_tensor(
             "isect_tiles_n_isects",
             [&]() {
                 isect_tiles<<<
-                    (total_elems + GSPLAT_N_THREADS - 1) / GSPLAT_N_THREADS,
-                    GSPLAT_N_THREADS,
+                    (total_elems + BSPLAT_N_THREADS - 1) / BSPLAT_N_THREADS,
+                    BSPLAT_N_THREADS,
                     0,
                     stream>>>(
                     packed,
@@ -259,7 +259,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> isect_tiles_tensor(
                 flatten_ids.data_ptr<int32_t>(),
                 flatten_ids_sorted.data_ptr<int32_t>()
             );
-            GSPLAT_CUB_WRAPPER(
+            BSPLAT_CUB_WRAPPER(
                 cub::DeviceRadixSort::SortPairs,
                 d_keys,
                 d_values,
@@ -286,7 +286,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> isect_tiles_tensor(
             // printf("DoubleBuffer d_values selector: %d\n",
             // d_values.selector);
         } else {
-            GSPLAT_CUB_WRAPPER(
+            BSPLAT_CUB_WRAPPER(
                 cub::DeviceRadixSort::SortPairs,
                 isect_ids.data_ptr<int64_t>(),
                 isect_ids_sorted.data_ptr<int64_t>(),
@@ -360,8 +360,8 @@ torch::Tensor isect_offset_encode_tensor(
     const uint32_t tile_width,
     const uint32_t tile_height
 ) {
-    GSPLAT_DEVICE_GUARD(isect_ids);
-    GSPLAT_CHECK_INPUT(isect_ids);
+    BSPLAT_DEVICE_GUARD(isect_ids);
+    BSPLAT_CHECK_INPUT(isect_ids);
 
     uint32_t n_isects = isect_ids.size(0);
     torch::Tensor offsets = torch::empty(
@@ -372,8 +372,8 @@ torch::Tensor isect_offset_encode_tensor(
         uint32_t tile_n_bits = (uint32_t)floor(log2(n_tiles)) + 1;
         at::cuda::CUDAStream stream = at::cuda::getCurrentCUDAStream();
         isect_offset_encode<<<
-            (n_isects + GSPLAT_N_THREADS - 1) / GSPLAT_N_THREADS,
-            GSPLAT_N_THREADS,
+            (n_isects + BSPLAT_N_THREADS - 1) / BSPLAT_N_THREADS,
+            BSPLAT_N_THREADS,
             0,
             stream>>>(
             n_isects,
@@ -389,4 +389,4 @@ torch::Tensor isect_offset_encode_tensor(
     return offsets;
 }
 
-} // namespace gsplat
+} // namespace bsplat

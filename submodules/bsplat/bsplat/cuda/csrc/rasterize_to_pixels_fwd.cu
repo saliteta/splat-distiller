@@ -5,7 +5,7 @@
 #include <cub/cub.cuh>
 #include <cuda_runtime.h>
 
-namespace gsplat {
+namespace bsplat {
 
 namespace cg = cooperative_groups;
 
@@ -163,7 +163,7 @@ __global__ void rasterize_to_pixels_fwd_kernel(
             int32_t g = id_batch[t];
             const S vis = alpha * T;
             const S *c_ptr = colors + g * COLOR_DIM;
-            GSPLAT_PRAGMA_UNROLL
+            BSPLAT_PRAGMA_UNROLL
             for (uint32_t k = 0; k < COLOR_DIM; ++k) {
                 pix_out[k] += c_ptr[k] * vis;
             }
@@ -180,7 +180,7 @@ __global__ void rasterize_to_pixels_fwd_kernel(
         // with float32. However, double precision makes the backward pass 1.5x
         // slower so we stick with float for now.
         render_alphas[pix_id] = 1.0f - T;
-        GSPLAT_PRAGMA_UNROLL
+        BSPLAT_PRAGMA_UNROLL
         for (uint32_t k = 0; k < COLOR_DIM; ++k) {
             render_colors[pix_id * COLOR_DIM + k] =
                 backgrounds == nullptr ? pix_out[k]
@@ -209,19 +209,19 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> call_kernel_with_dim(
     const torch::Tensor &tile_offsets, // [C, tile_height, tile_width]
     const torch::Tensor &flatten_ids   // [n_isects]
 ) {
-    GSPLAT_DEVICE_GUARD(means2d);
-    GSPLAT_CHECK_INPUT(means2d);
-    GSPLAT_CHECK_INPUT(conics);
-    GSPLAT_CHECK_INPUT(colors);
-    GSPLAT_CHECK_INPUT(opacities);
-    GSPLAT_CHECK_INPUT(betas);
-    GSPLAT_CHECK_INPUT(tile_offsets);
-    GSPLAT_CHECK_INPUT(flatten_ids);
+    BSPLAT_DEVICE_GUARD(means2d);
+    BSPLAT_CHECK_INPUT(means2d);
+    BSPLAT_CHECK_INPUT(conics);
+    BSPLAT_CHECK_INPUT(colors);
+    BSPLAT_CHECK_INPUT(opacities);
+    BSPLAT_CHECK_INPUT(betas);
+    BSPLAT_CHECK_INPUT(tile_offsets);
+    BSPLAT_CHECK_INPUT(flatten_ids);
     if (backgrounds.has_value()) {
-        GSPLAT_CHECK_INPUT(backgrounds.value());
+        BSPLAT_CHECK_INPUT(backgrounds.value());
     }
     if (masks.has_value()) {
-        GSPLAT_CHECK_INPUT(masks.value());
+        BSPLAT_CHECK_INPUT(masks.value());
     }
     bool packed = means2d.dim() == 2;
 
@@ -315,7 +315,7 @@ rasterize_to_pixels_fwd_tensor(
     const torch::Tensor &tile_offsets, // [C, tile_height, tile_width]
     const torch::Tensor &flatten_ids   // [n_isects]
 ) {
-    GSPLAT_CHECK_INPUT(colors);
+    BSPLAT_CHECK_INPUT(colors);
     uint32_t channels = colors.size(-1);
 
 #define __GS__CALL_(N)                                                         \
@@ -363,4 +363,4 @@ rasterize_to_pixels_fwd_tensor(
     }
 }
 
-} // namespace gsplat
+} // namespace bsplat

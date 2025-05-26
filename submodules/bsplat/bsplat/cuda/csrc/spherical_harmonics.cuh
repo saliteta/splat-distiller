@@ -1,5 +1,5 @@
-#ifndef GSPLAT_SPHERICAL_HARMONICS_CUH
-#define GSPLAT_SPHERICAL_HARMONICS_CUH
+#ifndef BSPLAT_SPHERICAL_HARMONICS_CUH
+#define BSPLAT_SPHERICAL_HARMONICS_CUH
 
 #include "bindings.h"
 #include "types.cuh"
@@ -7,7 +7,7 @@
 
 #include <cuda_runtime.h>
 
-namespace gsplat {
+namespace bsplat {
 
 // Evaluate spherical harmonics bases at unit direction for high orders using
 // approach described by Efficient Spherical Harmonic Evaluation, Peter-Pike
@@ -365,6 +365,6 @@ inline __device__ void sh_coeffs_to_color_fast_vjp(
     }
 }
 
-} // namespace gsplat
+} // namespace bsplat
 
-#endif // GSPLAT_SPHERICAL_HARMONICS_CUH
+#endif // BSPLAT_SPHERICAL_HARMONICS_CUH

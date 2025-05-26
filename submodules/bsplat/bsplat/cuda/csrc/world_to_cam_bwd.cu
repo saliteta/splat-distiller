@@ -8,7 +8,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
-namespace gsplat {
+namespace bsplat {
 
 namespace cg = cooperative_groups;
 
@@ -85,7 +85,7 @@ __global__ void world_to_cam_bwd_kernel(
         warpSum(v_mean, warp_group_g);
         if (warp_group_g.thread_rank() == 0) {
             v_means += gid * 3;
-            GSPLAT_PRAGMA_UNROLL
+            BSPLAT_PRAGMA_UNROLL
             for (uint32_t i = 0; i < 3; i++) {
                 gpuAtomicAdd(v_means + i, v_mean[i]);
             }
@@ -95,9 +95,9 @@ __global__ void world_to_cam_bwd_kernel(
         warpSum(v_covar, warp_group_g);
         if (warp_group_g.thread_rank() == 0) {
             v_covars += gid * 9;
-            GSPLAT_PRAGMA_UNROLL
+            BSPLAT_PRAGMA_UNROLL
             for (uint32_t i = 0; i < 3; i++) { // rows
-                GSPLAT_PRAGMA_UNROLL
+                BSPLAT_PRAGMA_UNROLL
                 for (uint32_t j = 0; j < 3; j++) { // cols
                     gpuAtomicAdd(v_covars + i * 3 + j, T(v_covar[j][i]));
                 }
@@ -110,9 +110,9 @@ __global__ void world_to_cam_bwd_kernel(
         warpSum(v_t, warp_group_c);
         if (warp_group_c.thread_rank() == 0) {
             v_viewmats += cid * 16;
-            GSPLAT_PRAGMA_UNROLL
+            BSPLAT_PRAGMA_UNROLL
             for (uint32_t i = 0; i < 3; i++) { // rows
-                GSPLAT_PRAGMA_UNROLL
+                BSPLAT_PRAGMA_UNROLL
                 for (uint32_t j = 0; j < 3; j++) { // cols
                     gpuAtomicAdd(v_viewmats + i * 4 + j, T(v_R[j][i]));
                 }
@@ -132,15 +132,15 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> world_to_cam_bwd_tensor(
     const bool covars_requires_grad,
     const bool viewmats_requires_grad
 ) {
-    GSPLAT_DEVICE_GUARD(means);
-    GSPLAT_CHECK_INPUT(means);
-    GSPLAT_CHECK_INPUT(covars);
-    GSPLAT_CHECK_INPUT(viewmats);
+    BSPLAT_DEVICE_GUARD(means);
+    BSPLAT_CHECK_INPUT(means);
+    BSPLAT_CHECK_INPUT(covars);
+    BSPLAT_CHECK_INPUT(viewmats);
     if (v_means_c.has_value()) {
-        GSPLAT_CHECK_INPUT(v_means_c.value());
+        BSPLAT_CHECK_INPUT(v_means_c.value());
     }
     if (v_covars_c.has_value()) {
-        GSPLAT_CHECK_INPUT(v_covars_c.value());
+        BSPLAT_CHECK_INPUT(v_covars_c.value());
     }
     uint32_t N = means.size(0);
     uint32_t C = viewmats.size(0);
@@ -165,8 +165,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> world_to_cam_bwd_tensor(
             "world_to_cam_bwd",
             [&]() {
                 world_to_cam_bwd_kernel<scalar_t>
-                    <<<(C * N + GSPLAT_N_THREADS - 1) / GSPLAT_N_THREADS,
-                       GSPLAT_N_THREADS,
+                    <<<(C * N + BSPLAT_N_THREADS - 1) / BSPLAT_N_THREADS,
+                       BSPLAT_N_THREADS,
                        0,
                        stream>>>(
                         C,
@@ -193,4 +193,4 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> world_to_cam_bwd_tensor(
     return std::make_tuple(v_means, v_covars, v_viewmats);
 }
 
-} // namespace gsplat
+} // namespace bsplat

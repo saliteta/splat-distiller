@@ -8,7 +8,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
-namespace gsplat {
+namespace bsplat {
 
 namespace cg = cooperative_groups;
 
@@ -198,17 +198,17 @@ fully_fused_projection_fwd_tensor(
     const bool calc_compensations,
     const bool ortho
 ) {
-    GSPLAT_DEVICE_GUARD(means);
-    GSPLAT_CHECK_INPUT(means);
+    BSPLAT_DEVICE_GUARD(means);
+    BSPLAT_CHECK_INPUT(means);
     if (covars.has_value()) {
-        GSPLAT_CHECK_INPUT(covars.value());
+        BSPLAT_CHECK_INPUT(covars.value());
     } else {
         assert(quats.has_value() && scales.has_value());
-        GSPLAT_CHECK_INPUT(quats.value());
-        GSPLAT_CHECK_INPUT(scales.value());
+        BSPLAT_CHECK_INPUT(quats.value());
+        BSPLAT_CHECK_INPUT(scales.value());
     }
-    GSPLAT_CHECK_INPUT(viewmats);
-    GSPLAT_CHECK_INPUT(Ks);
+    BSPLAT_CHECK_INPUT(viewmats);
+    BSPLAT_CHECK_INPUT(Ks);
 
     uint32_t N = means.size(0);    // number of gaussians
     uint32_t C = viewmats.size(0); // number of cameras
@@ -226,8 +226,8 @@ fully_fused_projection_fwd_tensor(
     }
     if (C && N) {
         fully_fused_projection_fwd_kernel<float>
-            <<<(C * N + GSPLAT_N_THREADS - 1) / GSPLAT_N_THREADS,
-               GSPLAT_N_THREADS,
+            <<<(C * N + BSPLAT_N_THREADS - 1) / BSPLAT_N_THREADS,
+               BSPLAT_N_THREADS,
                0,
                stream>>>(
                 C,
@@ -255,4 +255,4 @@ fully_fused_projection_fwd_tensor(
     return std::make_tuple(radii, means2d, depths, conics, compensations);
 }
 
-} // namespace gsplat
+} // namespace bsplat

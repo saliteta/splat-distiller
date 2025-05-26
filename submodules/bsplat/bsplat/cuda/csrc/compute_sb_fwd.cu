@@ -4,7 +4,7 @@
 #include <cooperative_groups.h>
 #include <cuda_runtime.h>
 
-namespace gsplat {
+namespace bsplat {
 
 namespace cg = cooperative_groups;
 
@@ -44,12 +44,12 @@ namespace cg = cooperative_groups;
         const torch::Tensor &coeffs,            // [..., num_primitives, 6]
         const at::optional<torch::Tensor> masks // [...]
     ) {
-        GSPLAT_DEVICE_GUARD(dirs);
-        GSPLAT_CHECK_INPUT(dirs);
-        GSPLAT_CHECK_INPUT(c0);
-        GSPLAT_CHECK_INPUT(coeffs);
+        BSPLAT_DEVICE_GUARD(dirs);
+        BSPLAT_CHECK_INPUT(dirs);
+        BSPLAT_CHECK_INPUT(c0);
+        BSPLAT_CHECK_INPUT(coeffs);
         if (masks.has_value()) {
-            GSPLAT_CHECK_INPUT(masks.value());
+            BSPLAT_CHECK_INPUT(masks.value());
         }
         TORCH_CHECK(coeffs.size(-1) == 6, "coeffs must have last dimension 6");
         TORCH_CHECK(dirs.size(-1) == 3, "dirs must have last dimension 3");
@@ -60,8 +60,8 @@ namespace cg = cooperative_groups;
         // parallelize over N * 3
         if (N) {
             compute_sh_fwd_kernel<float>
-                <<<(N + GSPLAT_N_THREADS - 1) / GSPLAT_N_THREADS,
-                GSPLAT_N_THREADS>>>(
+                <<<(N + BSPLAT_N_THREADS - 1) / BSPLAT_N_THREADS,
+                BSPLAT_N_THREADS>>>(
                     N,
                     K,
                     active_primitives,
@@ -83,4 +83,4 @@ namespace cg = cooperative_groups;
         return colors; // [..., 3]
     }
 
-} // namespace gsplat
+} // namespace bsplat

@@ -8,7 +8,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
-namespace gsplat {
+namespace bsplat {
 
 namespace cg = cooperative_groups;
 
@@ -59,14 +59,14 @@ __global__ void proj_fwd_kernel(
         persp_proj(mean, covar, fx, fy, cx, cy, width, height, covar2d, mean2d);
 
     // write to outputs: glm is column-major but we want row-major
-    GSPLAT_PRAGMA_UNROLL
+    BSPLAT_PRAGMA_UNROLL
     for (uint32_t i = 0; i < 2; i++) { // rows
-        GSPLAT_PRAGMA_UNROLL
+        BSPLAT_PRAGMA_UNROLL
         for (uint32_t j = 0; j < 2; j++) { // cols
             covars2d[i * 2 + j] = T(covar2d[j][i]);
         }
     }
-    GSPLAT_PRAGMA_UNROLL
+    BSPLAT_PRAGMA_UNROLL
     for (uint32_t i = 0; i < 2; i++) {
         means2d[i] = T(mean2d[i]);
     }
@@ -80,10 +80,10 @@ std::tuple<torch::Tensor, torch::Tensor> proj_fwd_tensor(
     const uint32_t height,
     const bool ortho
 ) {
-    GSPLAT_DEVICE_GUARD(means);
-    GSPLAT_CHECK_INPUT(means);
-    GSPLAT_CHECK_INPUT(covars);
-    GSPLAT_CHECK_INPUT(Ks);
+    BSPLAT_DEVICE_GUARD(means);
+    BSPLAT_CHECK_INPUT(means);
+    BSPLAT_CHECK_INPUT(covars);
+    BSPLAT_CHECK_INPUT(Ks);
 
     uint32_t C = means.size(0);
     uint32_t N = means.size(1);
@@ -100,8 +100,8 @@ std::tuple<torch::Tensor, torch::Tensor> proj_fwd_tensor(
             "proj_fwd",
             [&]() {
                 proj_fwd_kernel<scalar_t>
-                    <<<(C * N + GSPLAT_N_THREADS - 1) / GSPLAT_N_THREADS,
-                       GSPLAT_N_THREADS,
+                    <<<(C * N + BSPLAT_N_THREADS - 1) / BSPLAT_N_THREADS,
+                       BSPLAT_N_THREADS,
                        0,
                        stream>>>(
                         C,
@@ -121,4 +121,4 @@ std::tuple<torch::Tensor, torch::Tensor> proj_fwd_tensor(
     return std::make_tuple(means2d, covars2d);
 }
 
-} // namespace gsplat
+} // namespace bsplat
