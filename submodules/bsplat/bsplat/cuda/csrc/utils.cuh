@@ -1,5 +1,5 @@
-#ifndef GSPLAT_CUDA_UTILS_H
-#define GSPLAT_CUDA_UTILS_H
+#ifndef BSPLAT_CUDA_UTILS_H
+#define BSPLAT_CUDA_UTILS_H
 
 #include "helpers.cuh"
 
@@ -8,7 +8,7 @@
 
 #define FILTER_INV_SQUARE 2.0f
 
-namespace gsplat {
+namespace bsplat {
 
 template <typename T>
 inline __device__ mat3<T> quat_to_rotmat(const vec4<T> quat) {
@@ -566,6 +566,6 @@ inline __device__ void compute_ray_transforms_aabb_vjp(
     v_mean += v_RS[2];
 }
 
-} // namespace gsplat
+} // namespace bsplat
 
-#endif // GSPLAT_CUDA_UTILS_H
+#endif // BSPLAT_CUDA_UTILS_H

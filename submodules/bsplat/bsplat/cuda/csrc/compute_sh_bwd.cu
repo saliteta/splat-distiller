@@ -5,7 +5,7 @@
 #include <cooperative_groups.h>
 #include <cuda_runtime.h>
 
-namespace gsplat {
+namespace bsplat {
 
 namespace cg = cooperative_groups;
 
@@ -58,12 +58,12 @@ std::tuple<torch::Tensor, torch::Tensor> compute_sh_bwd_tensor(
     const torch::Tensor &v_colors,           // [..., 3]
     bool compute_v_dirs
 ) {
-    GSPLAT_DEVICE_GUARD(dirs);
-    GSPLAT_CHECK_INPUT(dirs);
-    GSPLAT_CHECK_INPUT(coeffs);
-    GSPLAT_CHECK_INPUT(v_colors);
+    BSPLAT_DEVICE_GUARD(dirs);
+    BSPLAT_CHECK_INPUT(dirs);
+    BSPLAT_CHECK_INPUT(coeffs);
+    BSPLAT_CHECK_INPUT(v_colors);
     if (masks.has_value()) {
-        GSPLAT_CHECK_INPUT(masks.value());
+        BSPLAT_CHECK_INPUT(masks.value());
     }
     TORCH_CHECK(v_colors.size(-1) == 3, "v_colors must have last dimension 3");
     TORCH_CHECK(coeffs.size(-1) == 3, "coeffs must have last dimension 3");
@@ -77,8 +77,8 @@ std::tuple<torch::Tensor, torch::Tensor> compute_sh_bwd_tensor(
     }
     if (N) {
         compute_sh_bwd_kernel<float>
-            <<<(N * 3 + GSPLAT_N_THREADS - 1) / GSPLAT_N_THREADS,
-               GSPLAT_N_THREADS>>>(
+            <<<(N * 3 + BSPLAT_N_THREADS - 1) / BSPLAT_N_THREADS,
+               BSPLAT_N_THREADS>>>(
                 N,
                 K,
                 degrees_to_use,
@@ -93,4 +93,4 @@ std::tuple<torch::Tensor, torch::Tensor> compute_sh_bwd_tensor(
     return std::make_tuple(v_coeffs, v_dirs); // [..., K, 3], [..., 3]
 }
 
-} // namespace gsplat
+} // namespace bsplat

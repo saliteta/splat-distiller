@@ -8,7 +8,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
-namespace gsplat {
+namespace bsplat {
 
 namespace cg = cooperative_groups;
 
@@ -185,7 +185,7 @@ __global__ void fully_fused_projection_packed_fwd_kernel(
         // First pass: compute the block-wide sum
         int32_t aggregate;
         if (__syncthreads_or(thread_data)) {
-            typedef cub::BlockReduce<int32_t, GSPLAT_N_THREADS> BlockReduce;
+            typedef cub::BlockReduce<int32_t, BSPLAT_N_THREADS> BlockReduce;
             __shared__ typename BlockReduce::TempStorage temp_storage;
             aggregate = BlockReduce(temp_storage).Sum(thread_data);
         } else {
@@ -197,7 +197,7 @@ __global__ void fully_fused_projection_packed_fwd_kernel(
     } else {
         // Second pass: write out the indices of the non zero elements
         if (__syncthreads_or(thread_data)) {
-            typedef cub::BlockScan<int32_t, GSPLAT_N_THREADS> BlockScan;
+            typedef cub::BlockScan<int32_t, BSPLAT_N_THREADS> BlockScan;
             __shared__ typename BlockScan::TempStorage temp_storage;
             BlockScan(temp_storage).ExclusiveSum(thread_data, thread_data);
         }
@@ -257,17 +257,17 @@ fully_fused_projection_packed_fwd_tensor(
     const bool calc_compensations,
     const bool ortho
 ) {
-    GSPLAT_DEVICE_GUARD(means);
-    GSPLAT_CHECK_INPUT(means);
+    BSPLAT_DEVICE_GUARD(means);
+    BSPLAT_CHECK_INPUT(means);
     if (covars.has_value()) {
-        GSPLAT_CHECK_INPUT(covars.value());
+        BSPLAT_CHECK_INPUT(covars.value());
     } else {
         assert(quats.has_value() && scales.has_value());
-        GSPLAT_CHECK_INPUT(quats.value());
-        GSPLAT_CHECK_INPUT(scales.value());
+        BSPLAT_CHECK_INPUT(quats.value());
+        BSPLAT_CHECK_INPUT(scales.value());
     }
-    GSPLAT_CHECK_INPUT(viewmats);
-    GSPLAT_CHECK_INPUT(Ks);
+    BSPLAT_CHECK_INPUT(viewmats);
+    BSPLAT_CHECK_INPUT(Ks);
 
     uint32_t N = means.size(0);    // number of gaussians
     uint32_t C = viewmats.size(0); // number of cameras
@@ -276,9 +276,9 @@ fully_fused_projection_packed_fwd_tensor(
 
     uint32_t nrows = C;
     uint32_t ncols = N;
-    uint32_t blocks_per_row = (ncols + GSPLAT_N_THREADS - 1) / GSPLAT_N_THREADS;
+    uint32_t blocks_per_row = (ncols + BSPLAT_N_THREADS - 1) / BSPLAT_N_THREADS;
 
-    dim3 threads = {GSPLAT_N_THREADS, 1, 1};
+    dim3 threads = {BSPLAT_N_THREADS, 1, 1};
     // limit on the number of blocks: [2**31 - 1, 65535, 65535]
     dim3 blocks = {blocks_per_row, nrows, 1};
 
@@ -381,4 +381,4 @@ fully_fused_projection_packed_fwd_tensor(
     );
 }
 
-} // namespace gsplat
+} // namespace bsplat

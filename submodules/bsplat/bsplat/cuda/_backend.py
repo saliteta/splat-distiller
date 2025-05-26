@@ -80,11 +80,11 @@ _C = None
 
 try:
     # try to import the compiled module (via setup.py)
-    from gsplat import csrc as _C
+    from bsplat import csrc as _C
 except ImportError:
     # if failed, try with JIT compilation
     if cuda_toolkit_available():
-        name = "gsplat_cuda"
+        name = "bsplat_cuda"
         build_dir = _get_build_directory(name, verbose=False)
         current_dir = os.path.dirname(os.path.abspath(__file__))
         glm_path = os.path.join(current_dir, "csrc", "third_party", "glm")
@@ -106,8 +106,8 @@ except ImportError:
         except OSError:
             pass
 
-        if os.path.exists(os.path.join(build_dir, "gsplat_cuda.so")) or os.path.exists(
-            os.path.join(build_dir, "gsplat_cuda.lib")
+        if os.path.exists(os.path.join(build_dir, "bsplat_cuda.so")) or os.path.exists(
+            os.path.join(build_dir, "bsplat_cuda.lib")
         ):
             # If the build exists, we assume the extension has been built
             # and we can load it.
@@ -124,7 +124,7 @@ except ImportError:
             # if the build directory exists with a lock file in it.
             shutil.rmtree(build_dir)
             with Console().status(
-                f"[bold yellow]gsplat: Setting up CUDA with MAX_JOBS={os.environ['MAX_JOBS']} (This may take a few minutes the first time)",
+                f"[bold yellow]bsplat: Setting up CUDA with MAX_JOBS={os.environ['MAX_JOBS']} (This may take a few minutes the first time)",
                 spinner="bouncingBall",
             ):
                 _C = load_extension(
@@ -138,7 +138,7 @@ except ImportError:
 
     else:
         Console().print(
-            "[yellow]gsplat: No CUDA toolkit found. gsplat will be disabled.[/yellow]"
+            "[yellow]bsplat: No CUDA toolkit found. bsplat will be disabled.[/yellow]"
         )
 
 if need_to_unset_max_jobs:

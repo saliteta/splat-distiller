@@ -8,7 +8,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
-namespace gsplat {
+namespace bsplat {
 
 namespace cg = cooperative_groups;
 
@@ -60,9 +60,9 @@ __global__ void quat_scale_to_covar_preci_fwd_kernel(
             covars[5] = T(covar[2][2]);
         } else {
             covars += idx * 9;
-            GSPLAT_PRAGMA_UNROLL
+            BSPLAT_PRAGMA_UNROLL
             for (uint32_t i = 0; i < 3; i++) { // rows
-                GSPLAT_PRAGMA_UNROLL
+                BSPLAT_PRAGMA_UNROLL
                 for (uint32_t j = 0; j < 3; j++) { // cols
                     covars[i * 3 + j] = T(covar[j][i]);
                 }
@@ -80,9 +80,9 @@ __global__ void quat_scale_to_covar_preci_fwd_kernel(
             precis[5] = T(preci[2][2]);
         } else {
             precis += idx * 9;
-            GSPLAT_PRAGMA_UNROLL
+            BSPLAT_PRAGMA_UNROLL
             for (uint32_t i = 0; i < 3; i++) { // rows
-                GSPLAT_PRAGMA_UNROLL
+                BSPLAT_PRAGMA_UNROLL
                 for (uint32_t j = 0; j < 3; j++) { // cols
                     precis[i * 3 + j] = T(preci[j][i]);
                 }
@@ -98,9 +98,9 @@ std::tuple<torch::Tensor, torch::Tensor> quat_scale_to_covar_preci_fwd_tensor(
     const bool compute_preci,
     const bool triu
 ) {
-    GSPLAT_DEVICE_GUARD(quats);
-    GSPLAT_CHECK_INPUT(quats);
-    GSPLAT_CHECK_INPUT(scales);
+    BSPLAT_DEVICE_GUARD(quats);
+    BSPLAT_CHECK_INPUT(quats);
+    BSPLAT_CHECK_INPUT(scales);
 
     uint32_t N = quats.size(0);
 
@@ -129,8 +129,8 @@ std::tuple<torch::Tensor, torch::Tensor> quat_scale_to_covar_preci_fwd_tensor(
             "quat_scale_to_covar_preci_fwd",
             [&]() {
                 quat_scale_to_covar_preci_fwd_kernel<<<
-                    (N + GSPLAT_N_THREADS - 1) / GSPLAT_N_THREADS,
-                    GSPLAT_N_THREADS,
+                    (N + BSPLAT_N_THREADS - 1) / BSPLAT_N_THREADS,
+                    BSPLAT_N_THREADS,
                     0,
                     stream>>>(
                     N,
@@ -146,4 +146,4 @@ std::tuple<torch::Tensor, torch::Tensor> quat_scale_to_covar_preci_fwd_tensor(
     return std::make_tuple(covars, precis);
 }
 
-} // namespace gsplat
+} // namespace bsplat

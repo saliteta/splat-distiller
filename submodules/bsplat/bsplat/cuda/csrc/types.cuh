@@ -1,5 +1,5 @@
-#ifndef GSPLAT_CUDA_TYPES_H
-#define GSPLAT_CUDA_TYPES_H
+#ifndef BSPLAT_CUDA_TYPES_H
+#define BSPLAT_CUDA_TYPES_H
 
 #include <cuda.h>
 #include <cuda_fp16.h>
@@ -10,7 +10,7 @@
 
 #include <ATen/Dispatch.h>
 
-namespace gsplat {
+namespace bsplat {
 
 template <typename T> using vec2 = glm::vec<2, T>;
 
@@ -46,6 +46,6 @@ template <> struct OpType<c10::BFloat16> {
     typedef float type;
 };
 
-} // namespace gsplat
+} // namespace bsplat
 
-#endif // GSPLAT_CUDA_TYPES_H
+#endif // BSPLAT_CUDA_TYPES_H

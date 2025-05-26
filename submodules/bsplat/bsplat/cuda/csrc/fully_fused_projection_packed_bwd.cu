@@ -8,7 +8,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
-namespace gsplat {
+namespace bsplat {
 
 namespace cg = cooperative_groups;
 
@@ -181,7 +181,7 @@ __global__ void fully_fused_projection_packed_bwd_kernel(
         // write out results with sparse layout
         if (v_means != nullptr) {
             v_means += idx * 3;
-            GSPLAT_PRAGMA_UNROLL
+            BSPLAT_PRAGMA_UNROLL
             for (uint32_t i = 0; i < 3; i++) {
                 v_means[i] = v_mean[i];
             }
@@ -220,7 +220,7 @@ __global__ void fully_fused_projection_packed_bwd_kernel(
             warpSum(v_mean, warp_group_g);
             if (warp_group_g.thread_rank() == 0) {
                 v_means += gid * 3;
-                GSPLAT_PRAGMA_UNROLL
+                BSPLAT_PRAGMA_UNROLL
                 for (uint32_t i = 0; i < 3; i++) {
                     gpuAtomicAdd(v_means + i, v_mean[i]);
                 }
@@ -268,9 +268,9 @@ __global__ void fully_fused_projection_packed_bwd_kernel(
         warpSum(v_t, warp_group_c);
         if (warp_group_c.thread_rank() == 0) {
             v_viewmats += cid * 16;
-            GSPLAT_PRAGMA_UNROLL
+            BSPLAT_PRAGMA_UNROLL
             for (uint32_t i = 0; i < 3; i++) { // rows
-                GSPLAT_PRAGMA_UNROLL
+                BSPLAT_PRAGMA_UNROLL
                 for (uint32_t j = 0; j < 3; j++) { // cols
                     gpuAtomicAdd(v_viewmats + i * 4 + j, v_R[j][i]);
                 }
@@ -311,28 +311,28 @@ fully_fused_projection_packed_bwd_tensor(
     const bool viewmats_requires_grad,
     const bool sparse_grad
 ) {
-    GSPLAT_DEVICE_GUARD(means);
-    GSPLAT_CHECK_INPUT(means);
+    BSPLAT_DEVICE_GUARD(means);
+    BSPLAT_CHECK_INPUT(means);
     if (covars.has_value()) {
-        GSPLAT_CHECK_INPUT(covars.value());
+        BSPLAT_CHECK_INPUT(covars.value());
     } else {
         assert(quats.has_value() && scales.has_value());
-        GSPLAT_CHECK_INPUT(quats.value());
-        GSPLAT_CHECK_INPUT(scales.value());
+        BSPLAT_CHECK_INPUT(quats.value());
+        BSPLAT_CHECK_INPUT(scales.value());
     }
-    GSPLAT_CHECK_INPUT(viewmats);
-    GSPLAT_CHECK_INPUT(Ks);
-    GSPLAT_CHECK_INPUT(camera_ids);
-    GSPLAT_CHECK_INPUT(primitive_ids);
-    GSPLAT_CHECK_INPUT(conics);
-    GSPLAT_CHECK_INPUT(v_means2d);
-    GSPLAT_CHECK_INPUT(v_depths);
-    GSPLAT_CHECK_INPUT(v_conics);
+    BSPLAT_CHECK_INPUT(viewmats);
+    BSPLAT_CHECK_INPUT(Ks);
+    BSPLAT_CHECK_INPUT(camera_ids);
+    BSPLAT_CHECK_INPUT(primitive_ids);
+    BSPLAT_CHECK_INPUT(conics);
+    BSPLAT_CHECK_INPUT(v_means2d);
+    BSPLAT_CHECK_INPUT(v_depths);
+    BSPLAT_CHECK_INPUT(v_conics);
     if (compensations.has_value()) {
-        GSPLAT_CHECK_INPUT(compensations.value());
+        BSPLAT_CHECK_INPUT(compensations.value());
     }
     if (v_compensations.has_value()) {
-        GSPLAT_CHECK_INPUT(v_compensations.value());
+        BSPLAT_CHECK_INPUT(v_compensations.value());
         assert(compensations.has_value());
     }
 
@@ -367,8 +367,8 @@ fully_fused_projection_packed_bwd_tensor(
     }
     if (nnz) {
         fully_fused_projection_packed_bwd_kernel<float>
-            <<<(nnz + GSPLAT_N_THREADS - 1) / GSPLAT_N_THREADS,
-               GSPLAT_N_THREADS,
+            <<<(nnz + BSPLAT_N_THREADS - 1) / BSPLAT_N_THREADS,
+               BSPLAT_N_THREADS,
                0,
                stream>>>(
                 C,
@@ -407,4 +407,4 @@ fully_fused_projection_packed_bwd_tensor(
     return std::make_tuple(v_means, v_covars, v_quats, v_scales, v_viewmats);
 }
 
-} // namespace gsplat
+} // namespace bsplat

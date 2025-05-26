@@ -8,7 +8,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
-namespace gsplat {
+namespace bsplat {
 
 namespace cg = cooperative_groups;
 
@@ -102,11 +102,11 @@ __global__ void quat_scale_to_covar_preci_bwd_kernel(
     }
 
     // write out results
-    GSPLAT_PRAGMA_UNROLL
+    BSPLAT_PRAGMA_UNROLL
     for (uint32_t k = 0; k < 3; ++k) {
         v_scales[k] = T(v_scale[k]);
     }
-    GSPLAT_PRAGMA_UNROLL
+    BSPLAT_PRAGMA_UNROLL
     for (uint32_t k = 0; k < 4; ++k) {
         v_quats[k] = T(v_quat[k]);
     }
@@ -119,14 +119,14 @@ std::tuple<torch::Tensor, torch::Tensor> quat_scale_to_covar_preci_bwd_tensor(
     const at::optional<torch::Tensor> &v_precis, // [N, 3, 3] or [N, 6]
     const bool triu
 ) {
-    GSPLAT_DEVICE_GUARD(quats);
-    GSPLAT_CHECK_INPUT(quats);
-    GSPLAT_CHECK_INPUT(scales);
+    BSPLAT_DEVICE_GUARD(quats);
+    BSPLAT_CHECK_INPUT(quats);
+    BSPLAT_CHECK_INPUT(scales);
     if (v_covars.has_value()) {
-        GSPLAT_CHECK_INPUT(v_covars.value());
+        BSPLAT_CHECK_INPUT(v_covars.value());
     }
     if (v_precis.has_value()) {
-        GSPLAT_CHECK_INPUT(v_precis.value());
+        BSPLAT_CHECK_INPUT(v_precis.value());
     }
 
     uint32_t N = quats.size(0);
@@ -143,8 +143,8 @@ std::tuple<torch::Tensor, torch::Tensor> quat_scale_to_covar_preci_bwd_tensor(
             "quat_scale_to_covar_preci_bwd",
             [&]() {
                 quat_scale_to_covar_preci_bwd_kernel<scalar_t>
-                    <<<(N + GSPLAT_N_THREADS - 1) / GSPLAT_N_THREADS,
-                       GSPLAT_N_THREADS,
+                    <<<(N + BSPLAT_N_THREADS - 1) / BSPLAT_N_THREADS,
+                       BSPLAT_N_THREADS,
                        0,
                        stream>>>(
                         N,
@@ -167,4 +167,4 @@ std::tuple<torch::Tensor, torch::Tensor> quat_scale_to_covar_preci_bwd_tensor(
     return std::make_tuple(v_quats, v_scales);
 }
 
-} // namespace gsplat
+} // namespace bsplat
