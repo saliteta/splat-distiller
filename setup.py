@@ -31,6 +31,9 @@ install_requires = [
         "torch",
         "typing_extensions; python_version<'3.8'",
         "splines",
+        "plas @ git+https://github.com/fraunhoferhhi/PLAS.git",
+        "pandas",
+        "tabulate",
 ]
 class BuildSubmodule(Command):
     """Custom command to install the submodule located in the 'submodule' folder."""
