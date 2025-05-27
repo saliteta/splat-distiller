@@ -153,7 +153,7 @@ class BetaModel:
             self.active_sh_degree += 1
 
     def create_from_pcd(self, pcd: BasicPointCloud, spatial_lr_scale: float):
-        self.spatial_lr_scale = 1.
+        self.spatial_lr_scale = 1.0
         fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
         fused_color = RGB2SH(torch.tensor(np.asarray(pcd.colors)).float().cuda())
         shs = (
@@ -883,7 +883,7 @@ class BetaModel:
 
         if render_mode == "Alpha":
             render_colors = alphas
-        
+
         if render_colors.shape[-1] == 1:
             render_colors = apply_depth_colormap(render_colors)
 

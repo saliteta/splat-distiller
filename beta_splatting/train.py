@@ -119,7 +119,7 @@ def training(args):
             loss += args.opacity_reg * torch.abs(beta_model.get_opacity).mean()
             loss += args.scale_reg * torch.abs(beta_model.get_scaling).mean()
         if iteration > args.densify_until_iter:
-            loss -= 10. * torch.abs(beta_model.get_opacity).mean()
+            loss -= 10.0 * torch.abs(beta_model.get_opacity).mean()
         loss.backward()
         iter_end.record()
 
