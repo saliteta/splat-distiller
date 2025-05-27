@@ -105,6 +105,7 @@ def main(local_rank: int, world_rank, world_size: int, args):
             alpha = render_alphas[0, ..., 0:1]
             renders = (
                 apply_float_colormap(alpha, render_tab_state.colormap).cpu().numpy()
+            )
         else:
             render_colors = render_colors[0, ..., 0:3].clamp(0, 1)
             renders = render_colors.cpu().numpy()
