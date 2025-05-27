@@ -88,6 +88,8 @@ class Runner:
                 render_mode="RGB",
             )
             splat_features[ids] += splat_features_per_image
+            del splat_features_per_image, _, ids
+            torch.cuda.empty_cache()
 
         basename, _ = os.path.splitext(args.ckpt)
 
