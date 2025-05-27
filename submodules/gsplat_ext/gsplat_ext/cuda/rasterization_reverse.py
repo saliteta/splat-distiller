@@ -3,8 +3,6 @@ from torch import Tensor
 from ._backend import _C
 
 
-
-
 def rasterize_reverse_fwd_2dgs(
     means2d: Tensor,
     ray_transforms: Tensor,
@@ -18,21 +16,21 @@ def rasterize_reverse_fwd_2dgs(
     packed: bool = False,
 ) -> Tuple[Tensor, Tensor]:
     """Rasterize Gaussians to pixels.
-    This function is a cuda wrapper function that takes already processed information and feature information of images in, 
-    and output the feature of each 2D Gaussian influenced by that particular feature map. 
+    This function is a cuda wrapper function that takes already processed information and feature information of images in,
+    and output the feature of each 2D Gaussian influenced by that particular feature map.
 
-    Args: 
+    Args:
         means2d: Tensor, the center of each Gaussian on 2D map (nnz, 2)
         ray_transforms: 2D Gaussian's ray transformation matrix (nnz,3, 3)
         opacites Gaussian alpha (nnz)
         input_image: feature map (h,w,c)
-        image_width: W 
+        image_width: W
         image_height: H
         tile_size: the default size should be 16, every Gaussian is processed according to a tile
         tile_offset: previous processed result
         flatten_ids: previous processed result
         packed: will be test on packed is true
-    Return: 
+    Return:
         feature_gaussian: the feature accumulate for this particular image on the Gaussian it related to (nnz, n)
         feature_weight: The weight of each pixel combined (nnz) should be the same as the gradient of feature
 
@@ -94,21 +92,21 @@ def rasterize_reverse_fwd_3dgs(
     packed: bool = True,
 ) -> Tuple[Tensor, Tensor]:
     """Rasterize Gaussians to pixels.
-    This function is a cuda wrapper function that takes already processed information and feature information of images in, 
-    and output the feature of each 2D Gaussian influenced by that particular feature map. 
+    This function is a cuda wrapper function that takes already processed information and feature information of images in,
+    and output the feature of each 2D Gaussian influenced by that particular feature map.
 
-    Args: 
+    Args:
         means2d: Tensor, the center of each Gaussian on 2D map (nnz, 2)
         ray_transforms: 2D Gaussian's ray transformation matrix (nnz,3, 3)
         opacites Gaussian alpha (nnz)
         input_image: feature map (h,w,c)
-        image_width: W 
+        image_width: W
         image_height: H
         tile_size: the default size should be 16, every Gaussian is processed according to a tile
         tile_offset: previous processed result
         flatten_ids: previous processed result
         packed: will be test on packed is true
-    Return: 
+    Return:
         feature_gaussian: the feature accumulate for this particular image on the Gaussian it related to (nnz, n)
         feature_weight: The weight of each pixel combined (nnz) should be the same as the gradient of feature
 
@@ -146,11 +144,9 @@ def rasterize_reverse_fwd_3dgs(
         conics.contiguous(),
         opacities.contiguous(),
         input_image.contiguous(),
-
         image_width,
         image_height,
         tile_size,
-        
         isect_offsets.contiguous(),
         flatten_ids.contiguous(),
     )

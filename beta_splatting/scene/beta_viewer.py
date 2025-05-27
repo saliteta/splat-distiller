@@ -15,9 +15,9 @@ class BetaRenderTabState(RenderTabState):
     radius_clip: float = 0.0
     b_range: Tuple[float, float] = (-5.0, 5.0)
     backgrounds: Tuple[float, float, float] = (0.0, 0.0, 0.0)
-    render_mode: Literal["RGB", "Alpha", "Diffuse", "Specular", "Depth", "Normal"] = (
-        "RGB"
-    )
+    render_mode: Literal[
+        "RGB", "Alpha", "Diffuse", "Specular", "Depth", "Normal"
+    ] = "RGB"
 
 
 class BetaViewer(Viewer):
@@ -135,9 +135,9 @@ class BetaViewer(Viewer):
 
     def _after_render(self):
         # Update the GUI elements with current values
-        self._rendering_tab_handles["total_count_number"].value = (
-            self.render_tab_state.total_count_number
-        )
-        self._rendering_tab_handles["rendered_count_number"].value = (
-            self.render_tab_state.rendered_count_number
-        )
+        self._rendering_tab_handles[
+            "total_count_number"
+        ].value = self.render_tab_state.total_count_number
+        self._rendering_tab_handles[
+            "rendered_count_number"
+        ].value = self.render_tab_state.rendered_count_number

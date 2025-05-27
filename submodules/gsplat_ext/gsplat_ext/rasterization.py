@@ -1,4 +1,7 @@
-from .cuda.rasterization_reverse import rasterize_reverse_fwd_2dgs, rasterize_reverse_fwd_3dgs
+from .cuda.rasterization_reverse import (
+    rasterize_reverse_fwd_2dgs,
+    rasterize_reverse_fwd_3dgs,
+)
 import torch
 import torch.distributed
 from torch import Tensor
@@ -17,10 +20,8 @@ from gsplat.cuda._wrapper import (
     isect_offset_encode,
     isect_tiles,
     fully_fused_projection_2dgs,
-    spherical_harmonics
-    
+    spherical_harmonics,
 )
-
 
 
 def inverse_rasterization_3dgs(
@@ -234,8 +235,13 @@ def inverse_rasterization_3dgs(
     assert opacities.shape == (N,), opacities.shape
     assert viewmats.shape == (C, 4, 4), viewmats.shape
     assert Ks.shape == (C, 3, 3), Ks.shape
-    assert render_mode in ["RGB", "D", "ED", "RGB+D", "RGB+ED"], render_mode  # We might modify this part
-
+    assert render_mode in [
+        "RGB",
+        "D",
+        "ED",
+        "RGB+D",
+        "RGB+ED",
+    ], render_mode  # We might modify this part
 
     # treat colors as SH coefficients, should be in shape [N, K, 3] or [C, N, K, 3]
     # Allowing for activating partial SH bands
@@ -301,7 +307,6 @@ def inverse_rasterization_3dgs(
 
     # Turn colors into [C, N, D] or [nnz, D] to pass into rasterize_to_pixels()
 
-
     # If in distributed mode, we need to scatter the GSs to the destination ranks, based
     # on which cameras they are visible to, which we already figured out in the projection
     # stage.
@@ -339,13 +344,14 @@ def inverse_rasterization_3dgs(
         }
     )
 
-
     if input_image.shape[-1] > channel_chunk:
         # slice into chunks
         n_chunks = (input_image.shape[-1] + channel_chunk - 1) // channel_chunk
         feature_gaussian, feature_weight = [], []
         for i in range(n_chunks):
-            feature_chunck = input_image[..., i * channel_chunk : (i + 1) * channel_chunk]
+            feature_chunck = input_image[
+                ..., i * channel_chunk : (i + 1) * channel_chunk
+            ]
             feature_gaussian_, feature_weight_ = rasterize_reverse_fwd_3dgs(
                 means2d,
                 conics,
@@ -376,11 +382,9 @@ def inverse_rasterization_3dgs(
             packed=packed,
         )
 
-
     return feature_gaussian, feature_weight, gaussian_ids
 
 
-    
 ###### 2DGS ######
 def inverse_rasterization_2dgs(
     means: Tensor,
@@ -511,7 +515,9 @@ def inverse_rasterization_2dgs(
     assert viewmats.shape == (C, 4, 4), viewmats.shape
     assert Ks.shape == (C, 3, 3), Ks.shape
     assert render_mode in ["RGB", "D", "ED", "RGB+D", "RGB+ED"], render_mode
-    assert len(input_image.shape) == 4, "The input image dimension should be C,H,W,feature_dim"
+    assert (
+        len(input_image.shape) == 4
+    ), "The input image dimension should be C,H,W,feature_dim"
     if distloss:
         assert render_mode in [
             "D",
@@ -519,8 +525,6 @@ def inverse_rasterization_2dgs(
             "RGB+D",
             "RGB+ED",
         ], f"distloss requires depth rendering, render_mode should be D, ED, RGB+D, RGB+ED, but got {render_mode}"
-
-
 
     # Compute Ray-Splat intersection transformation.
     proj_results = fully_fused_projection_2dgs(
@@ -575,8 +579,7 @@ def inverse_rasterization_2dgs(
     )
     isect_offsets = isect_offset_encode(isect_ids, C, tile_width, tile_height)
 
-
-    feature_gaussian, feature_weight= rasterize_reverse_fwd_2dgs(
+    feature_gaussian, feature_weight = rasterize_reverse_fwd_2dgs(
         means2d,
         ray_transforms,
         opacities,

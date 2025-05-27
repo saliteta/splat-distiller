@@ -83,7 +83,6 @@ def get_extensions():
     glm_path = osp.join(current_dir, "gsplat_ext", "cuda", "csrc", "third_party", "glm")
     include_dirs = [glm_path, osp.join(current_dir, "gsplat_ext", "cuda", "include")]
 
-
     extension = CUDAExtension(
         "gsplat_ext.csrc",
         sources,
@@ -141,11 +140,10 @@ setup(
             "cuda/include/*.h",
             "cuda/include/*.cuh",
             "cuda/csrc/third_party/**/*",
-            "*.py"  # Ensure all files in view_embedding are included
+            "*.py",  # Ensure all files in view_embedding are included
         ]
     },
     include_package_data=True,
-
 )
 
 

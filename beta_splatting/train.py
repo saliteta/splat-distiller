@@ -46,7 +46,7 @@ def training(args):
         viewer = BetaViewer(
             server=server,
             render_fn=lambda camera_state, render_tab_state: beta_model.view(
-            camera_state, render_tab_state
+                camera_state, render_tab_state
             ),
             mode="training",
         )
