@@ -60,6 +60,9 @@ class BuildSubmodule(Command):
         subprocess.check_call(
             ["pip", "install", "."], cwd=os.path.join(submodule_path, "gsplat")
         )
+        subprocess.check_call(
+            ["pip", "install", "."], cwd=os.path.join(submodule_path, "gsplat_ext")
+        )
 
 
 class CustomInstall(install):
