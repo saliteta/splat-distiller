@@ -1,0 +1,2 @@
+recursive-include gsplat_ext/cuda/csrc *
+recursive-include gsplat_ext/cuda/include *
