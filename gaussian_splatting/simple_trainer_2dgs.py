@@ -273,7 +273,7 @@ class Runner:
         self.parser = Parser(
             data_dir=cfg.data_dir,
             factor=cfg.data_factor,
-            normalize=True,
+            normalize=False,
             test_every=cfg.test_every,
         )
         self.trainset = Dataset(

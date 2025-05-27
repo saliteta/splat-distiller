@@ -861,7 +861,7 @@ class BetaModel:
         if mask == None:
             mask = torch.ones_like(self.get_beta.squeeze()).bool()
 
-        render_colors = rasterization(
+        render_colors, alphas, _ = rasterization(
             means=self.get_xyz[mask],
             quats=self.get_rotation[mask],
             scales=self.get_scaling[mask],
@@ -873,14 +873,17 @@ class BetaModel:
             width=W,
             height=H,
             backgrounds=self.background.unsqueeze(0),
-            render_mode=render_mode,
+            render_mode=render_mode if render_mode != "Alpha" else "RGB",
             covars=None,
             sh_degree=self.active_sh_degree,
             sb_number=self.sb_number,
             sb_params=self.get_sb_params[mask],
             packed=False,
-        )[0]
+        )
 
+        if render_mode == "Alpha":
+            render_colors = alphas
+        
         if render_colors.shape[-1] == 1:
             render_colors = apply_depth_colormap(render_colors)
 
