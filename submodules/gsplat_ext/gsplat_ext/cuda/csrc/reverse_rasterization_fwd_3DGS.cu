@@ -201,7 +201,7 @@ namespace cg = cooperative_groups;
                 tile_width,
                 tile_height,
                 reinterpret_cast<vec2*>(means2d.data_ptr<float>()),
-                reinterpret_cast<vec3 *>(conics.data_ptr<float>()),
+                reinterpret_cast<vec3*>(conics.data_ptr<float>()),
                 opacities.data_ptr<float>(),
                 rendered_colors.data_ptr<float>(),
                 tile_offsets.data_ptr<int32_t>(),

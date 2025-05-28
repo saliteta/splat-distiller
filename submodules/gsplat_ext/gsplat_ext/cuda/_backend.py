@@ -95,7 +95,9 @@ except ImportError:
             extra_cuda_cflags = ["-O3"]
         else:
             extra_cuda_cflags = ["-O3", "--use_fast_math"]
-        sources = list(glob.glob(os.path.join(PATH, "csrc/*.cu"))) + list(glob.glob(os.path.join(PATH, "csrc/*.cpp"))) 
+        sources = list(glob.glob(os.path.join(PATH, "csrc/*.cu"))) + list(
+            glob.glob(os.path.join(PATH, "csrc/*.cpp"))
+        )
         # If JIT is interrupted it might leave a lock in the build directory.
         # We dont want it to exist in any case.
         try:

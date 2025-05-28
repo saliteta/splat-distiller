@@ -97,5 +97,40 @@ reverse_rasterize_to_gaussians_2dgs(
 );
 
 
+
+// 2D GS newest GSPLAT
+/**
+ * High-level C++ binding for reverse 2D Gaussian rasterization.
+ * Calls the above kernel launcher based on the CDIM.
+ *
+ * @param means2d          Tensor of Gaussian centers: [C, N, 2] or packed [nnz, 2]
+ * @param conics   Tensor of ray transform matrices: [C, N, 3, 3] or [nnz, 3, 3]
+ * @param opacities        Opacities:  [nnz]
+ * @param betas        Opacities:  [nnz]
+ * @param rendered_colors  Rendered image tensor: [C, H, W, CDIM]
+ * @param image_width      Width of the rendered image
+ * @param image_height     Height of the rendered image
+ * @param tile_size        Tile size for block dispatch
+ * @param tile_offsets     Intersection tile offsets: [C, tile_h, tile_w]
+ * @param flatten_ids      Flattened Gaussian indices: [n_isects]
+ * @return A pair of tensors: (gauss_features: [C, N, CDIM], gauss_weights: [C, N])
+ */
+std::tuple<torch::Tensor, torch::Tensor>
+reverse_rasterize_to_bsplats(
+    // Gaussian parameters
+    const at::Tensor& means2d,   // [C, N, 2] or [nnz, 2]
+    const at::Tensor& conics,    // [C, N, 3] or [nnz, 3]
+    const at::Tensor& opacities, // [C, N]  or [nnz]
+    const at::Tensor& betas, // [C, N]  or [nnz]
+    const at::Tensor& rendered_colors, // [C, H, W, CDIM]
+    // image size
+    const uint32_t image_width,
+    const uint32_t image_height,
+    const uint32_t tile_size,
+    // intersections
+    const at::Tensor& tile_offsets, // [C, tile_height, tile_width]
+    const at::Tensor& flatten_ids   // [n_isects]
+);
+
 } // namespace gsplat_ext
 
