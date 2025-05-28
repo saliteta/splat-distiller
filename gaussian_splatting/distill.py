@@ -54,6 +54,9 @@ class Runner:
         splat_features = torch.zeros(
             (means.shape[0], feature_dim), dtype=torch.float32, device=device
         )
+        splat_weights = torch.zeros(
+            (means.shape[0]), dtype=torch.float32, device=device
+        )
 
         for i, data in tqdm(enumerate(trainloader), desc="Distilling features"):
             camtoworlds = data["camtoworld"].to(device)
@@ -74,7 +77,11 @@ class Runner:
             # Permute back to [B, H, W, C] if required downstream
             features = features.permute(0, 2, 3, 1)
 
-            splat_features_per_image, _, ids = inverse_rasterization_3dgs(
+            (
+                splat_features_per_image,
+                splat_weights_per_image,
+                ids,
+            ) = inverse_rasterization_3dgs(
                 means=means,
                 quats=quats,
                 scales=torch.exp(scales),
@@ -88,11 +95,14 @@ class Runner:
                 render_mode="RGB",
             )
             splat_features[ids] += splat_features_per_image
-            del splat_features_per_image, _, ids
+            splat_weights[ids] += splat_weights_per_image
+            del splat_features_per_image, splat_weights_per_image, ids
             torch.cuda.empty_cache()
 
-        basename, _ = os.path.splitext(args.ckpt)
+        splat_features /= splat_weights[..., None]
+        splat_features = torch.nan_to_num(splat_features, nan=0.0)
 
+        basename, _ = os.path.splitext(args.ckpt)
         torch.save(splat_features, basename + "_features.pt")
 
 
