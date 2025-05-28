@@ -357,11 +357,13 @@ class Dataset:
         split: str = "train",
         patch_size: Optional[int] = None,
         load_depths: bool = False,
+        load_features: bool = False,
     ):
         self.parser = parser
         self.split = split
         self.patch_size = patch_size
         self.load_depths = load_depths
+        self.load_features = load_features
         indices = np.arange(len(self.parser.image_names))
         if split == "train":
             self.indices = indices[indices % self.parser.test_every != 0]
@@ -430,6 +432,14 @@ class Dataset:
             depths = depths[selector]
             data["points"] = torch.from_numpy(points).float()
             data["depths"] = torch.from_numpy(depths).float()
+
+        if self.load_features:
+            # Load features if available.
+            base_name = os.path.splitext(self.parser.image_names[index])[0]
+            feature_path = os.path.join(
+                self.parser.data_dir, "features", f"{base_name}.pt"
+            )
+            data["features"] = torch.load(feature_path)
 
         return data
 
