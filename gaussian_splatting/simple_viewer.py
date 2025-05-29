@@ -39,7 +39,6 @@ def main(local_rank: int, world_rank, world_size: int, args):
 
     features = None
     features_pca = None
-    relevance = None
 
     if args.feature_ckpt is None:
         args.feature_ckpt = os.path.splitext(args.ckpt)[0] + "_features.pt"
@@ -81,9 +80,8 @@ def main(local_rank: int, world_rank, world_size: int, args):
             width = render_tab_state.viewer_width
             height = render_tab_state.viewer_height
 
-        if render_tab_state.text_change:
-            nonlocal relevance
-            relevance = compute_relevance(features, render_tab_state)
+        if render_tab_state.text_change and features is not None:
+            render_tab_state.relevance = compute_relevance(features, render_tab_state)
             render_tab_state.text_change = False
 
         c2w = camera_state.c2w
@@ -111,7 +109,7 @@ def main(local_rank: int, world_rank, world_size: int, args):
             (
                 features_pca
                 if render_tab_state.render_mode == "feature"
-                else relevance
+                else render_tab_state.relevance
                 if render_tab_state.render_mode == "relevance"
                 else colors
             ),  # [N, S, 3]
@@ -174,12 +172,22 @@ def main(local_rank: int, world_rank, world_size: int, args):
         return renders
 
     server = viser.ViserServer(port=args.port, verbose=False)
-    _ = GsplatViewer(
+
+    viewer = GsplatViewer(
         server=server,
         render_fn=viewer_render_fn,
         output_dir=Path(args.output_dir),
         mode="rendering",
     )
+    if features is None:
+        viewer.render_mode_dropdown.options = (
+            "rgb",
+            "depth(accumulated)",
+            "depth(expected)",
+            "alpha",
+            "diffuse",
+            "specular",
+        )
     print("Viewer running... Ctrl+C to exit.")
     time.sleep(100000)
 

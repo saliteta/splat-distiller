@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Literal
 from typing import Tuple, Callable
 from nerfview import Viewer, RenderTabState
+from torch import Tensor
 
 
 class GsplatRenderTabState(RenderTabState):
@@ -29,6 +30,7 @@ class GsplatRenderTabState(RenderTabState):
     ] = "rgb"
     query_text: str = ""
     text_change: bool = True
+    relevance: Tensor = None
     normalize_nearfar: bool = False
     inverse: bool = False
     colormap: Literal[
@@ -148,7 +150,7 @@ class GsplatViewer(Viewer):
                     self.render_tab_state.backgrounds = backgrounds_slider.value
                     self.rerender(_)
 
-                render_mode_dropdown = server.gui.add_dropdown(
+                self.render_mode_dropdown = server.gui.add_dropdown(
                     "Render Mode",
                     (
                         "rgb",
@@ -164,21 +166,21 @@ class GsplatViewer(Viewer):
                     hint="Render mode to use.",
                 )
 
-                @render_mode_dropdown.on_update
+                @self.render_mode_dropdown.on_update
                 def _(_) -> None:
-                    if "depth" in render_mode_dropdown.value:
+                    if "depth" in self.render_mode_dropdown.value:
                         normalize_nearfar_checkbox.disabled = False
                         inverse_checkbox.disabled = False
                     else:
                         normalize_nearfar_checkbox.disabled = True
                         inverse_checkbox.disabled = True
-                    if render_mode_dropdown.value == "relevance":
+                    if self.render_mode_dropdown.value == "relevance":
                         quetry_text_input.disabled = False
                         quetry_submit_button.disabled = False
                     else:
                         quetry_text_input.disabled = True
                         quetry_submit_button.disabled = True
-                    self.render_tab_state.render_mode = render_mode_dropdown.value
+                    self.render_tab_state.render_mode = self.render_mode_dropdown.value
                     self.rerender(_)
 
                 quetry_text_input = server.gui.add_text(
@@ -269,7 +271,7 @@ class GsplatViewer(Viewer):
                 "radius_clip_slider": radius_clip_slider,
                 "eps2d_slider": eps2d_slider,
                 "backgrounds_slider": backgrounds_slider,
-                "render_mode_dropdown": render_mode_dropdown,
+                "render_mode_dropdown": self.render_mode_dropdown,
                 "normalize_nearfar_checkbox": normalize_nearfar_checkbox,
                 "inverse_checkbox": inverse_checkbox,
                 "colormap_dropdown": colormap_dropdown,
