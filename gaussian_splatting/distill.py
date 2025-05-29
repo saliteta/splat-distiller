@@ -6,6 +6,7 @@ import argparse
 from gsplat_ext import inverse_rasterization_3dgs
 import os
 from tqdm import tqdm
+import torch.nn.functional as F
 
 
 class Runner:
@@ -42,9 +43,9 @@ class Runner:
         ]
         means, quats, scales, opacities = (
             self.splat["means"],
-            self.splat["quats"],
-            self.splat["scales"],
-            self.splat["opacities"],
+            F.normalize(self.splat["quats"], p=2, dim=-1),
+            torch.exp(self.splat["scales"]),
+            torch.sigmoid(self.splat["opacities"]),
         )
 
         trainloader = torch.utils.data.DataLoader(
@@ -84,15 +85,13 @@ class Runner:
             ) = inverse_rasterization_3dgs(
                 means=means,
                 quats=quats,
-                scales=torch.exp(scales),
-                opacities=torch.sigmoid(opacities).squeeze(-1),
+                scales=scales,
+                opacities=opacities,
                 input_image=features,
                 viewmats=torch.linalg.inv(camtoworlds),
                 Ks=Ks,
                 width=width,
                 height=height,
-                packed=True,
-                render_mode="RGB",
             )
             splat_features[ids] += splat_features_per_image
             splat_weights[ids] += splat_weights_per_image
