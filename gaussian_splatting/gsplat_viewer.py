@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Literal
 from typing import Tuple, Callable
 from nerfview import Viewer, RenderTabState
+from torch import Tensor
 
 
 class GsplatRenderTabState(RenderTabState):
@@ -18,8 +19,18 @@ class GsplatRenderTabState(RenderTabState):
     eps2d: float = 0.3
     backgrounds: Tuple[float, float, float] = (0.0, 0.0, 0.0)
     render_mode: Literal[
-        "rgb", "depth(accumulated)", "depth(expected)", "alpha", "diffuse", "specular"
+        "rgb",
+        "depth(accumulated)",
+        "depth(expected)",
+        "alpha",
+        "diffuse",
+        "specular",
+        "feature",
+        "relevance",
     ] = "rgb"
+    query_text: str = ""
+    text_change: bool = True
+    relevance: Tensor = None
     normalize_nearfar: bool = False
     inverse: bool = False
     colormap: Literal[
@@ -139,7 +150,7 @@ class GsplatViewer(Viewer):
                     self.render_tab_state.backgrounds = backgrounds_slider.value
                     self.rerender(_)
 
-                render_mode_dropdown = server.gui.add_dropdown(
+                self.render_mode_dropdown = server.gui.add_dropdown(
                     "Render Mode",
                     (
                         "rgb",
@@ -148,20 +159,46 @@ class GsplatViewer(Viewer):
                         "alpha",
                         "diffuse",
                         "specular",
+                        "feature",
+                        "relevance",
                     ),
                     initial_value=self.render_tab_state.render_mode,
                     hint="Render mode to use.",
                 )
 
-                @render_mode_dropdown.on_update
+                @self.render_mode_dropdown.on_update
                 def _(_) -> None:
-                    if "depth" in render_mode_dropdown.value:
+                    if "depth" in self.render_mode_dropdown.value:
                         normalize_nearfar_checkbox.disabled = False
                         inverse_checkbox.disabled = False
                     else:
                         normalize_nearfar_checkbox.disabled = True
                         inverse_checkbox.disabled = True
-                    self.render_tab_state.render_mode = render_mode_dropdown.value
+                    if self.render_mode_dropdown.value == "relevance":
+                        quetry_text_input.disabled = False
+                        quetry_submit_button.disabled = False
+                    else:
+                        quetry_text_input.disabled = True
+                        quetry_submit_button.disabled = True
+                    self.render_tab_state.render_mode = self.render_mode_dropdown.value
+                    self.rerender(_)
+
+                quetry_text_input = server.gui.add_text(
+                    "Prompt",
+                    initial_value=self.render_tab_state.query_text,
+                    disabled=True,
+                    hint="Use Relevance mode to query",
+                )
+                quetry_submit_button = server.gui.add_button(
+                    "Query",
+                    disabled=True,
+                    hint="Use Relevance mode to query",
+                )
+
+                @quetry_submit_button.on_click
+                def _(_) -> None:
+                    self.render_tab_state.query_text = quetry_text_input.value
+                    self.render_tab_state.text_change = True
                     self.rerender(_)
 
                 normalize_nearfar_checkbox = server.gui.add_checkbox(
@@ -234,7 +271,7 @@ class GsplatViewer(Viewer):
                 "radius_clip_slider": radius_clip_slider,
                 "eps2d_slider": eps2d_slider,
                 "backgrounds_slider": backgrounds_slider,
-                "render_mode_dropdown": render_mode_dropdown,
+                "render_mode_dropdown": self.render_mode_dropdown,
                 "normalize_nearfar_checkbox": normalize_nearfar_checkbox,
                 "inverse_checkbox": inverse_checkbox,
                 "colormap_dropdown": colormap_dropdown,

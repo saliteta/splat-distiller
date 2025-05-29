@@ -6,6 +6,7 @@ import argparse
 from gsplat_ext import inverse_rasterization_3dgs
 import os
 from tqdm import tqdm
+import torch.nn.functional as F
 
 
 class Runner:
@@ -42,9 +43,9 @@ class Runner:
         ]
         means, quats, scales, opacities = (
             self.splat["means"],
-            self.splat["quats"],
-            self.splat["scales"],
-            self.splat["opacities"],
+            F.normalize(self.splat["quats"], p=2, dim=-1),
+            torch.exp(self.splat["scales"]),
+            torch.sigmoid(self.splat["opacities"]),
         )
 
         trainloader = torch.utils.data.DataLoader(
@@ -53,6 +54,9 @@ class Runner:
         feature_dim = self.trainset[0]["features"].shape[-1]
         splat_features = torch.zeros(
             (means.shape[0], feature_dim), dtype=torch.float32, device=device
+        )
+        splat_weights = torch.zeros(
+            (means.shape[0]), dtype=torch.float32, device=device
         )
 
         for i, data in tqdm(enumerate(trainloader), desc="Distilling features"):
@@ -74,25 +78,30 @@ class Runner:
             # Permute back to [B, H, W, C] if required downstream
             features = features.permute(0, 2, 3, 1)
 
-            splat_features_per_image, _, ids = inverse_rasterization_3dgs(
+            (
+                splat_features_per_image,
+                splat_weights_per_image,
+                ids,
+            ) = inverse_rasterization_3dgs(
                 means=means,
                 quats=quats,
-                scales=torch.exp(scales),
-                opacities=torch.sigmoid(opacities).squeeze(-1),
+                scales=scales,
+                opacities=opacities,
                 input_image=features,
                 viewmats=torch.linalg.inv(camtoworlds),
                 Ks=Ks,
                 width=width,
                 height=height,
-                packed=True,
-                render_mode="RGB",
             )
             splat_features[ids] += splat_features_per_image
-            del splat_features_per_image, _, ids
+            splat_weights[ids] += splat_weights_per_image
+            del splat_features_per_image, splat_weights_per_image, ids
             torch.cuda.empty_cache()
 
-        basename, _ = os.path.splitext(args.ckpt)
+        splat_features /= splat_weights[..., None]
+        splat_features = torch.nan_to_num(splat_features, nan=0.0)
 
+        basename, _ = os.path.splitext(args.ckpt)
         torch.save(splat_features, basename + "_features.pt")
 
 

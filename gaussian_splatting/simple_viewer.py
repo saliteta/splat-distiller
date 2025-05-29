@@ -3,121 +3,71 @@ import math
 import os
 import time
 
-import imageio
-import numpy as np
 import torch
 import torch.nn.functional as F
-import tqdm
 import viser
 from pathlib import Path
-from gsplat._helper import load_test_data
 from gsplat.distributed import cli
 from gsplat.rendering import rasterization
 
 from nerfview import CameraState, RenderTabState, apply_float_colormap
 from gsplat_viewer import GsplatViewer, GsplatRenderTabState
+from sklearn.decomposition import PCA
+import clip
 
 
 def main(local_rank: int, world_rank, world_size: int, args):
     torch.manual_seed(42)
     device = torch.device("cuda", local_rank)
+    clip_model = (
+        torch.hub.load("mhamilton723/FeatUp", "maskclip", use_norm=False)
+        .to(device)
+        .eval()
+        .model.model
+    )
 
-    if args.ckpt is None:
-        (
-            means,
-            quats,
-            scales,
-            opacities,
-            colors,
-            viewmats,
-            Ks,
-            width,
-            height,
-        ) = load_test_data(device=device, scene_grid=args.scene_grid)
+    ckpt = torch.load(args.ckpt, map_location=device)["splats"]
+    means = ckpt["means"]
+    quats = F.normalize(ckpt["quats"], p=2, dim=-1)
+    scales = torch.exp(ckpt["scales"])
+    opacities = torch.sigmoid(ckpt["opacities"])
+    sh0 = ckpt["sh0"]
+    shN = ckpt["shN"]
+    colors = torch.cat([sh0, shN], dim=-2)
+    sh_degree = int(math.sqrt(colors.shape[-2]) - 1)
+    print("Number of Gaussians:", len(means))
 
-        assert world_size <= 2
-        means = means[world_rank::world_size].contiguous()
-        means.requires_grad = True
-        quats = quats[world_rank::world_size].contiguous()
-        quats.requires_grad = True
-        scales = scales[world_rank::world_size].contiguous()
-        scales.requires_grad = True
-        opacities = opacities[world_rank::world_size].contiguous()
-        opacities.requires_grad = True
-        colors = colors[world_rank::world_size].contiguous()
-        colors.requires_grad = True
+    features = None
+    features_pca = None
 
-        viewmats = viewmats[world_rank::world_size][:1].contiguous()
-        Ks = Ks[world_rank::world_size][:1].contiguous()
+    if args.feature_ckpt is None:
+        args.feature_ckpt = os.path.splitext(args.ckpt)[0] + "_features.pt"
+    if os.path.exists(args.feature_ckpt):
+        features = torch.load(args.feature_ckpt, map_location=device)
+        print("Using features from", args.feature_ckpt)
+        features_np = features.cpu().numpy()
+        features_np = features_np.reshape(features_np.shape[0], -1)
+        # Perform PCA to reduce the feature dimensions to 3
+        pca = PCA(n_components=3)
+        features_pca = pca.fit_transform(features_np)
+        features_pca = torch.from_numpy(features_pca).float().to(device)
 
-        sh_degree = None
-        C = len(viewmats)
-        N = len(means)
-        print("rank", world_rank, "Number of Gaussians:", N, "Number of Cameras:", C)
-
-        # batched render
-        for _ in tqdm.trange(1):
-            render_colors, render_alphas, meta = rasterization(
-                means,  # [N, 3]
-                quats,  # [N, 4]
-                scales,  # [N, 3]
-                opacities,  # [N]
-                colors,  # [N, S, 3]
-                viewmats,  # [C, 4, 4]
-                Ks,  # [C, 3, 3]
-                width,
-                height,
-                render_mode="RGB+D",
-                packed=False,
-                distributed=world_size > 1,
-            )
-        C = render_colors.shape[0]
-        assert render_colors.shape == (C, height, width, 4)
-        assert render_alphas.shape == (C, height, width, 1)
-        render_colors.sum().backward()
-
-        render_rgbs = render_colors[..., 0:3]
-        render_depths = render_colors[..., 3:4]
-        render_depths = render_depths / render_depths.max()
-
-        # dump batch images
-        os.makedirs(args.output_dir, exist_ok=True)
-        canvas = (
-            torch.cat(
-                [
-                    render_rgbs.reshape(C * height, width, 3),
-                    render_depths.reshape(C * height, width, 1).expand(-1, -1, 3),
-                    render_alphas.reshape(C * height, width, 1).expand(-1, -1, 3),
-                ],
-                dim=1,
-            )
-            .detach()
-            .cpu()
-            .numpy()
-        )
-        imageio.imsave(
-            f"{args.output_dir}/render_rank{world_rank}.png",
-            (canvas * 255).astype(np.uint8),
-        )
-    else:
-        means, quats, scales, opacities, sh0, shN = [], [], [], [], [], []
-        for ckpt_path in args.ckpt:
-            ckpt = torch.load(ckpt_path, map_location=device)["splats"]
-            means.append(ckpt["means"])
-            quats.append(F.normalize(ckpt["quats"], p=2, dim=-1))
-            scales.append(torch.exp(ckpt["scales"]))
-            opacities.append(torch.sigmoid(ckpt["opacities"]))
-            sh0.append(ckpt["sh0"])
-            shN.append(ckpt["shN"])
-        means = torch.cat(means, dim=0)
-        quats = torch.cat(quats, dim=0)
-        scales = torch.cat(scales, dim=0)
-        opacities = torch.cat(opacities, dim=0)
-        sh0 = torch.cat(sh0, dim=0)
-        shN = torch.cat(shN, dim=0)
-        colors = torch.cat([sh0, shN], dim=-2)
-        sh_degree = int(math.sqrt(colors.shape[-2]) - 1)
-        print("Number of Gaussians:", len(means))
+    @torch.no_grad()
+    def compute_relevance(features, render_tab_state):
+        text_tokens = clip.tokenize(render_tab_state.query_text).to(
+            device
+        )  # Shape: [1, token_length]
+        text_features = clip_model.encode_text(text_tokens)  # Shape: [1, 512]
+        text_features = text_features / text_features.norm(
+            dim=-1, keepdim=True
+        )  # Normalize
+        features = features / features.norm(dim=-1, keepdim=True)  # Shape: [N, 512]
+        relevance = torch.sum(
+            features * text_features, dim=-1, keepdim=True
+        )  # Shape: [N, 1]
+        relevance = (relevance - relevance.min()) / (relevance.max() - relevance.min())
+        relevance = apply_float_colormap(relevance, render_tab_state.colormap)
+        return relevance
 
     # register and open viewer
     @torch.no_grad()
@@ -129,6 +79,11 @@ def main(local_rank: int, world_rank, world_size: int, args):
         else:
             width = render_tab_state.viewer_width
             height = render_tab_state.viewer_height
+
+        if render_tab_state.text_change and features is not None:
+            render_tab_state.relevance = compute_relevance(features, render_tab_state)
+            render_tab_state.text_change = False
+
         c2w = camera_state.c2w
         K = camera_state.get_K((width, height))
         c2w = torch.from_numpy(c2w).float().to(device)
@@ -142,6 +97,8 @@ def main(local_rank: int, world_rank, world_size: int, args):
             "alpha": "RGB",
             "diffuse": "Diffuse",
             "specular": "Specular",
+            "feature": "RGB",
+            "relevance": "RGB",
         }
 
         render_colors, render_alphas, info = rasterization(
@@ -149,15 +106,25 @@ def main(local_rank: int, world_rank, world_size: int, args):
             quats,  # [N, 4]
             scales,  # [N, 3]
             opacities,  # [N]
-            colors,  # [N, S, 3]
+            (
+                features_pca
+                if render_tab_state.render_mode == "feature"
+                else render_tab_state.relevance
+                if render_tab_state.render_mode == "relevance"
+                else colors
+            ),  # [N, S, 3]
             viewmat[None],  # [1, 4, 4]
             K[None],  # [1, 3, 3]
             width,
             height,
             sh_degree=(
-                min(render_tab_state.max_sh_degree, sh_degree)
-                if sh_degree is not None
-                else None
+                None
+                if render_tab_state.render_mode in ["feature", "relevance"]
+                else (
+                    min(render_tab_state.max_sh_degree, sh_degree)
+                    if sh_degree is not None
+                    else None
+                )
             ),
             near_plane=render_tab_state.near_plane,
             far_plane=render_tab_state.far_plane,
@@ -205,28 +172,27 @@ def main(local_rank: int, world_rank, world_size: int, args):
         return renders
 
     server = viser.ViserServer(port=args.port, verbose=False)
-    _ = GsplatViewer(
+
+    viewer = GsplatViewer(
         server=server,
         render_fn=viewer_render_fn,
         output_dir=Path(args.output_dir),
         mode="rendering",
     )
+    if features is None:
+        viewer.render_mode_dropdown.options = (
+            "rgb",
+            "depth(accumulated)",
+            "depth(expected)",
+            "alpha",
+            "diffuse",
+            "specular",
+        )
     print("Viewer running... Ctrl+C to exit.")
     time.sleep(100000)
 
 
 if __name__ == "__main__":
-    """
-    # Use single GPU to view the scene
-    CUDA_VISIBLE_DEVICES=9 python -m simple_viewer \
-        --ckpt results/garden/ckpts/ckpt_6999_rank0.pt \
-        --output_dir results/garden/ \
-        --port 8082
-    
-    CUDA_VISIBLE_DEVICES=9 python -m simple_viewer \
-        --output_dir results/garden/ \
-        --port 8082
-    """
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--output_dir", type=str, default="results/", help="where to dump outputs"
@@ -234,8 +200,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--scene_grid", type=int, default=1, help="repeat the scene into a grid of NxN"
     )
+    parser.add_argument("--ckpt", type=str, default=None, help="path to the .pt file")
     parser.add_argument(
-        "--ckpt", type=str, nargs="+", default=None, help="path to the .pt file"
+        "--feature_ckpt", type=str, default=None, help="path to the features.pt file"
     )
     parser.add_argument(
         "--port", type=int, default=8080, help="port for the viewer server"
