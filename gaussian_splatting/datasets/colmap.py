@@ -367,8 +367,11 @@ class Dataset:
         indices = np.arange(len(self.parser.image_names))
         if split == "train":
             self.indices = indices[indices % self.parser.test_every != 0]
-        else:
+        elif split == "val":
             self.indices = indices[indices % self.parser.test_every == 0]
+        elif split == "all":
+            self.indices = indices
+        print(f"[Dataset] we set split to allset: {len(self.indices)} images.")
 
     def __len__(self):
         return len(self.indices)
@@ -470,3 +473,4 @@ if __name__ == "__main__":
             cv2.circle(image, (int(x), int(y)), 2, (255, 0, 0), -1)
         writer.append_data(image)
     writer.close()
+
