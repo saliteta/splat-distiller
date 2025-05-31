@@ -1,37 +1,47 @@
 import torch
 from datasets.colmap import Dataset, Parser
-from utils import set_random_seed
-from gsplat.distributed import cli
 import argparse
 from gsplat_ext import inverse_rasterization_3dgs
 import os
 from tqdm import tqdm
 import torch.nn.functional as F
 
+def get_viewmat(optimized_camera_to_world):
+    """
+    function that converts c2w to gsplat world2camera matrix, using compile for some speed
+    """
+    optimized_camera_to_world = optimized_camera_to_world.unsqueeze(0)
+    R = optimized_camera_to_world[:, :3, :3]  # 3 x 3
+    T = optimized_camera_to_world[:, :3, 3:4]  # 3 x 1
+    # flip the z and y axes to align with gsplat conventions
+    R = R * torch.tensor([[[1, -1, -1]]], device=R.device, dtype=R.dtype)
+    # analytic matrix inverse to get world2camera matrix
+    R_inv = R.transpose(1, 2)
+    T_inv = -torch.bmm(R_inv, T)
+    viewmat = torch.zeros(R.shape[0], 4, 4, device=R.device, dtype=R.dtype)
+    viewmat[:, 3, 3] = 1.0  # homogenous
+    viewmat[:, :3, :3] = R_inv
+    viewmat[:, :3, 3:4] = T_inv
+    return viewmat
+
 
 class Runner:
     """Engine for training and testing."""
 
     def __init__(self, args) -> None:
-        set_random_seed(42)
 
-        self.args = args
         self.device = f"cuda"
 
         # Load data: Training data should contain initial points and colors.
         self.parser = Parser(
             data_dir=args.data_dir,
-            factor=args.data_factor,
-            test_every=args.test_every,
+            factor=1,
         )
-        self.trainset = Dataset(
+        self.dataset = Dataset(
             self.parser,
-            split="train",
+            split="all",
             load_features=True,
         )
-        self.valset = Dataset(self.parser, split="val")
-        self.scene_scale = self.parser.scene_scale * 1.1
-        print("Scene scale:", self.scene_scale)
 
     @torch.no_grad()
     def distill(self, args):
@@ -48,10 +58,8 @@ class Runner:
             torch.sigmoid(self.splat["opacities"]),
         )
 
-        trainloader = torch.utils.data.DataLoader(
-            self.trainset, batch_size=1, shuffle=False, num_workers=1
-        )
-        feature_dim = self.trainset[0]["features"].shape[-1]
+        
+        feature_dim = self.dataset[0]["features"].shape[-1]
         splat_features = torch.zeros(
             (means.shape[0], feature_dim), dtype=torch.float32, device=device
         )
@@ -59,24 +67,26 @@ class Runner:
             (means.shape[0]), dtype=torch.float32, device=device
         )
 
-        for i, data in tqdm(enumerate(trainloader), desc="Distilling features"):
+        for i, data in tqdm(enumerate(self.dataset), desc="Distilling features"):
             camtoworlds = data["camtoworld"].to(device)
-            Ks = data["K"].to(device)
+            Ks = data["K"].to(device).unsqueeze(0)
             pixels = data["image"].to(device) / 255.0
-            height, width = pixels.shape[1:3]
-            features = data["features"].to(device)
-
-            # Permute features from [B, H, W, C] to [B, C, H, W]
-            features = features.permute(0, 3, 1, 2)
+            height, width = pixels.shape[0:2]
+            
+            features = data["features"].to(device).permute(2,0,1).unsqueeze(0)
+            
             # Interpolate features to match the size of pixels (height, width)
+            
             features = torch.nn.functional.interpolate(
                 features,
-                size=(pixels.shape[1], pixels.shape[2]),
+                size=(height, width),
                 mode="bilinear",
                 align_corners=False,
-            )
+            ).squeeze().permute(2,0,1)
+            
+            features = F.normalize(features.reshape(-1, features.shape[-1]), dim=1).reshape(height,width,-1)
             # Permute back to [B, H, W, C] if required downstream
-            features = features.permute(0, 2, 3, 1)
+            features = features.unsqueeze(0)
 
             (
                 splat_features_per_image,
@@ -88,7 +98,7 @@ class Runner:
                 scales=scales,
                 opacities=opacities,
                 input_image=features,
-                viewmats=torch.linalg.inv(camtoworlds),
+                viewmats= get_viewmat(camtoworlds),
                 Ks=Ks,
                 width=width,
                 height=height,
@@ -99,43 +109,39 @@ class Runner:
             torch.cuda.empty_cache()
 
         splat_features /= splat_weights[..., None]
+        print(splat_features.shape)
         splat_features = torch.nan_to_num(splat_features, nan=0.0)
 
         basename, _ = os.path.splitext(args.ckpt)
         torch.save(splat_features, basename + "_features.pt")
+        print(f"successfully saved to -> {basename}_features.pt")
 
 
-def main(local_rank: int, world_rank, world_size: int, args):
 
-    runner = Runner(args)
-    runner.distill(args)
-
-
-if __name__ == "__main__":
-
-    parser = argparse.ArgumentParser()
+def parser():  
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(description="Distill features from Gaussian Splatting")
     parser.add_argument(
         "--ckpt",
         type=str,
-        default=None,
+        required=True,
+        help="Path to the checkpoint file containing the Gaussian splats.",
     )
     parser.add_argument(
         "--data-dir",
         type=str,
-        default=None,
-        help="Path to the dataset",
+        required=True,
+        help="Path to the dataset directory.",
     )
-    parser.add_argument(
-        "--data-factor",
-        type=int,
-        default=1,
-        help="Downsample factor for the dataset",
-    )
-    parser.add_argument(
-        "--test_every",
-        type=int,
-        default=8,
-        help="Every N images there is a test image",
-    )
-    args = parser.parse_args()
-    cli(main, args, verbose=True)
+    return parser.parse_args()
+
+def main():
+    args = parser()
+    runner = Runner(args)
+    runner.distill(args)
+
+if __name__ == "__main__":
+    main()
+
+
+
