@@ -137,7 +137,7 @@ namespace cg = cooperative_groups;
                 for (int k = 0; k < CDIM; ++k) {
                     atomicAdd(&gauss_features[g*CDIM + k], pixel_color[k] * vis);
                 }
-                atomicAdd(&gauss_weights[g], vis);
+                atomicAdd(&gauss_weights[g], vis * vis);
 
                 T = next_T;
             }
