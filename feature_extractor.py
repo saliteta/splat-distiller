@@ -82,7 +82,7 @@ def main():
     # Define transformations
     transform = T.Compose(
         [
-            T.Resize((224,224)),
+            T.Resize((224, 224)),
             T.ToTensor(),
             T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
         ]
@@ -129,7 +129,7 @@ def main():
         # Save as a .pt
         base_name, _ = os.path.splitext(filename)
         out_path = os.path.join(features_output_dir, f"{base_name}.pt")
-        torch.save(hr_feats, out_path)  
+        torch.save(hr_feats, out_path)
 
 
 if __name__ == "__main__":
