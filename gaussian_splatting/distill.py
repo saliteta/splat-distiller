@@ -49,7 +49,7 @@ class Runner:
         )
 
         trainloader = torch.utils.data.DataLoader(
-            self.trainset, batch_size=1, shuffle=False, num_workers=1
+            self.trainset, batch_size=1, shuffle=False
         )
         feature_dim = self.trainset[0]["features"].shape[-1]
         splat_features = torch.zeros(
