@@ -13,7 +13,7 @@ from gsplat.rendering import rasterization
 from nerfview import CameraState, RenderTabState, apply_float_colormap
 from gsplat_viewer import GsplatViewer, GsplatRenderTabState
 from sklearn.decomposition import PCA
-import clip
+from featup.featurizers.maskclip.clip import tokenize 
 
 
 def main(local_rank: int, world_rank, world_size: int, args):
@@ -54,18 +54,20 @@ def main(local_rank: int, world_rank, world_size: int, args):
 
     @torch.no_grad()
     def compute_relevance(features, render_tab_state):
-        text_tokens = clip.tokenize(render_tab_state.query_text).to(
-            device
-        )  # Shape: [1, token_length]
-        text_features = clip_model.encode_text(text_tokens)  # Shape: [1, 512]
-        text_features = text_features / text_features.norm(
-            dim=-1, keepdim=True
-        )  # Normalize
-        features = features / features.norm(dim=-1, keepdim=True)  # Shape: [N, 512]
+        text_features = clip_model.encode_text(tokenize(render_tab_state.query_text).cuda()).float()
+        text_features = F.normalize(text_features, dim=0) # mc, the positive word is the last one
+
+        
+        #features = F.normalize(features, p=2, dim=-1, eps=1e-8)   # Shape: [N, 512]
         relevance = torch.sum(
             features * text_features, dim=-1, keepdim=True
         )  # Shape: [N, 1]
+        relevance = torch.clamp(relevance, relevance.mean().item())  # Ensure values are in [0, 1]
         relevance = (relevance - relevance.min()) / (relevance.max() - relevance.min())
+        print("Relevance computed with shape:", relevance.shape)
+        print("Relevance min:", relevance.min().item(), "max:", relevance.max().item())
+        print("Relevance mean:", relevance.mean().item())
+        print("Relevance std:", relevance.std().item())
         relevance = apply_float_colormap(relevance, render_tab_state.colormap)
         return relevance
 
