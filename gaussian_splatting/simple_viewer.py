@@ -64,10 +64,6 @@ def main(local_rank: int, world_rank, world_size: int, args):
         )  # Shape: [N, 1]
         relevance = torch.clamp(relevance, relevance.mean().item())  # Ensure values are in [0, 1]
         relevance = (relevance - relevance.min()) / (relevance.max() - relevance.min())
-        print("Relevance computed with shape:", relevance.shape)
-        print("Relevance min:", relevance.min().item(), "max:", relevance.max().item())
-        print("Relevance mean:", relevance.mean().item())
-        print("Relevance std:", relevance.std().item())
         relevance = apply_float_colormap(relevance, render_tab_state.colormap)
         return relevance
 
