@@ -589,60 +589,60 @@ class Runner:
                 pixels.permute(0, 3, 1, 2), colors.permute(0, 3, 1, 2)
             )
             loss = l1loss * (1.0 - cfg.ssim_lambda) + ssimloss * cfg.ssim_lambda
-            if cfg.depth_loss:
-                # query depths from depth map
-                points = torch.stack(
-                    [
-                        points[:, :, 0] / (width - 1) * 2 - 1,
-                        points[:, :, 1] / (height - 1) * 2 - 1,
-                    ],
-                    dim=-1,
-                )  # normalize to [-1, 1]
-                grid = points.unsqueeze(2)  # [1, M, 1, 2]
-                depths = F.grid_sample(
-                    depths.permute(0, 3, 1, 2), grid, align_corners=True
-                )  # [1, 1, M, 1]
-                depths = depths.squeeze(3).squeeze(1)  # [1, M]
-                # calculate loss in disparity space
-                disp = torch.where(depths > 0.0, 1.0 / depths, torch.zeros_like(depths))
-                disp_gt = 1.0 / depths_gt  # [1, M]
-                depthloss = F.l1_loss(disp, disp_gt) * self.scene_scale
-                loss += depthloss * cfg.depth_lambda
+            # if cfg.depth_loss:
+            #     # query depths from depth map
+            #     points = torch.stack(
+            #         [
+            #             points[:, :, 0] / (width - 1) * 2 - 1,
+            #             points[:, :, 1] / (height - 1) * 2 - 1,
+            #         ],
+            #         dim=-1,
+            #     )  # normalize to [-1, 1]
+            #     grid = points.unsqueeze(2)  # [1, M, 1, 2]
+            #     depths = F.grid_sample(
+            #         depths.permute(0, 3, 1, 2), grid, align_corners=True
+            #     )  # [1, 1, M, 1]
+            #     depths = depths.squeeze(3).squeeze(1)  # [1, M]
+            #     # calculate loss in disparity space
+            #     disp = torch.where(depths > 0.0, 1.0 / depths, torch.zeros_like(depths))
+            #     disp_gt = 1.0 / depths_gt  # [1, M]
+            #     depthloss = F.l1_loss(disp, disp_gt) * self.scene_scale
+            #     loss += depthloss * cfg.depth_lambda
 
-            if cfg.normal_loss:
-                if step > cfg.normal_start_iter:
-                    curr_normal_lambda = cfg.normal_lambda
-                else:
-                    curr_normal_lambda = 0.0
-                # normal consistency loss
-                normals = normals.squeeze(0).permute((2, 0, 1))
-                normals_from_depth *= alphas.squeeze(0).detach()
-                if len(normals_from_depth.shape) == 4:
-                    normals_from_depth = normals_from_depth.squeeze(0)
-                normals_from_depth = normals_from_depth.permute((2, 0, 1))
-                normal_error = (1 - (normals * normals_from_depth).sum(dim=0))[None]
-                normalloss = curr_normal_lambda * normal_error.mean()
-                loss += normalloss
+            # if cfg.normal_loss:
+            #     if step > cfg.normal_start_iter:
+            #         curr_normal_lambda = cfg.normal_lambda
+            #     else:
+            #         curr_normal_lambda = 0.0
+            #     # normal consistency loss
+            #     normals = normals.squeeze(0).permute((2, 0, 1))
+            #     normals_from_depth *= alphas.squeeze(0).detach()
+            #     if len(normals_from_depth.shape) == 4:
+            #         normals_from_depth = normals_from_depth.squeeze(0)
+            #     normals_from_depth = normals_from_depth.permute((2, 0, 1))
+            #     normal_error = (1 - (normals * normals_from_depth).sum(dim=0))[None]
+            #     normalloss = curr_normal_lambda * normal_error.mean()
+            #     loss += normalloss
 
-            if cfg.dist_loss:
-                if step > cfg.dist_start_iter:
-                    curr_dist_lambda = cfg.dist_lambda
-                else:
-                    curr_dist_lambda = 0.0
-                distloss = render_distort.mean()
-                loss += distloss * curr_dist_lambda
+            # if cfg.dist_loss:
+            #     if step > cfg.dist_start_iter:
+            #         curr_dist_lambda = cfg.dist_lambda
+            #     else:
+            #         curr_dist_lambda = 0.0
+            #     distloss = render_distort.mean()
+            #     loss += distloss * curr_dist_lambda
 
             loss.backward()
 
             desc = f"loss={loss.item():.3f}| " f"sh degree={sh_degree_to_use}| "
-            if cfg.depth_loss:
-                desc += f"depth loss={depthloss.item():.6f}| "
-            if cfg.dist_loss:
-                desc += f"dist loss={distloss.item():.6f}"
-            if cfg.pose_opt and cfg.pose_noise:
-                # monitor the pose error if we inject noise
-                pose_err = F.l1_loss(camtoworlds_gt, camtoworlds)
-                desc += f"pose err={pose_err.item():.6f}| "
+            # if cfg.depth_loss:
+            #     desc += f"depth loss={depthloss.item():.6f}| "
+            # if cfg.dist_loss:
+            #     desc += f"dist loss={distloss.item():.6f}"
+            # if cfg.pose_opt and cfg.pose_noise:
+            #     # monitor the pose error if we inject noise
+            #     pose_err = F.l1_loss(camtoworlds_gt, camtoworlds)
+            #     desc += f"pose err={pose_err.item():.6f}| "
             pbar.set_description(desc)
 
             if cfg.tb_every > 0 and step % cfg.tb_every == 0:
@@ -652,12 +652,12 @@ class Runner:
                 self.writer.add_scalar("train/ssimloss", ssimloss.item(), step)
                 self.writer.add_scalar("train/num_GS", len(self.splats["means"]), step)
                 self.writer.add_scalar("train/mem", mem, step)
-                if cfg.depth_loss:
-                    self.writer.add_scalar("train/depthloss", depthloss.item(), step)
-                if cfg.normal_loss:
-                    self.writer.add_scalar("train/normalloss", normalloss.item(), step)
-                if cfg.dist_loss:
-                    self.writer.add_scalar("train/distloss", distloss.item(), step)
+                # if cfg.depth_loss:
+                #     self.writer.add_scalar("train/depthloss", depthloss.item(), step)
+                # if cfg.normal_loss:
+                #     self.writer.add_scalar("train/normalloss", normalloss.item(), step)
+                # if cfg.dist_loss:
+                #     self.writer.add_scalar("train/distloss", distloss.item(), step)
                 if cfg.tb_save_image:
                     canvas = (
                         torch.cat([pixels, colors[..., :3]], dim=2)
