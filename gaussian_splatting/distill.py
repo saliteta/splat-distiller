@@ -77,6 +77,7 @@ class Runner:
             )
             # Permute back to [B, H, W, C] if required downstream
             features = features.permute(0, 2, 3, 1)
+            features = F.normalize(features, p=2, dim=-1)
 
             (
                 splat_features_per_image,
