@@ -1,45 +1,106 @@
 import os
 from argparse import ArgumentParser
-import json
-import pandas as pd
-
-# Lists of scenes for each dataset
-lerf_ovs_scenes = [
-    "ramen",
-    "figurines",
-    "teatime",
-    "waldo_kitchen",
-]
+from pathlib import Path
 
 
-parser = ArgumentParser(description="Full evaluation script parameters")
-parser.add_argument("--output_path", default="./eval")
-parser.add_argument("--lerf_ovs", type=str, help="Path to lerf_ovs dataset")
-parser.add_argument("--3d_ovs", type=str, help="Path to 3d ovs dataset")
-parser.add_argument(
-    "--skip_feature_extraction",
-    action="store_true",
-    help="Skip feature extraction step",
-)
-parser.add_argument(
-    "--skip_training",
-    action="store_true",
-    help="Skip training step",
-)
-args = parser.parse_args()
+def args_parser():
+    parser = ArgumentParser(description="Full evaluation script parameters")
+    parser.add_argument("--output_path", default="./eval")
+    parser.add_argument("--lerf_ovs", type=str, help="Path to lerf_ovs dataset")
+    parser.add_argument("--3d_ovs", type=str, help="Path to 3d ovs dataset")
+    parser.add_argument(
+        "--skip_feature_extraction",
+        action="store_true",
+        help="Skip feature extraction step",
+    )
+    parser.add_argument(
+        "--skip_training",
+        action="store_true",
+        help="Skip training step",
+    )
 
-if args.lerf_ovs:
-    for scene in lerf_ovs_scenes:
-        source = os.path.join(args.lerf_ovs, scene)
+    parser.add_argument("--training_method", 
+            default="3DGS", 
+            help="training method to use, can be choose from Gaussian Splatting, 2DGS, beta deformable splatting", 
+            choices=["3DGS", "2DGS", "BDS"])
+
+    parser.add_argument(
+        "--skip_lifting",
+        action="store_true",
+        help="Skip lifting step",
+    )
+
+    parser.add_argument(
+        "--skip_evaluation",
+        action="store_true",
+        help="Skip evaluation step",
+    )
+
+    return parser.parse_args()
+
+
+
+def run_lerf_ovs_evaluation(args):
+    lerf_base_path = Path(args.lerf_ovs) / "dataset"
+    for scene in lerf_base_path.iterdir():
+        # Do something to scene
         if not args.skip_feature_extraction:
             print(f"Extracting features for {scene}...")
-            os.system(f"python feature_extractor.py -s {source}")
+            os.system(f"python feature_extractor.py -s {scene}")
         if not args.skip_training:
-            print(f"Running Gaussian Splatting for {scene}...")
-            os.system(
-                rf"python gaussian_splatting/simple_trainer.py mcmc --data-dir {source} --result_dir {args.output_path}/{scene} --disable_viewer"
-            )
-        print(f"Distilling features for {scene}...")
-        os.system(
-            rf"python gaussian_splatting/distill.py --data-dir {source} --ckpt {args.output_path}/{scene}/ckpts/ckpt_29999_rank0.pt"
-        )
+            if args.training_method == "3DGS":
+                print(f"Running Gaussian Splatting for {scene}...")
+                os.system(
+                    rf"python gaussian_splatting/simple_trainer.py default --data-dir {scene} --result_dir {args.output_path}/{scene} --data-factor 1.0 --disable_viewer --random-bkgd"
+                )
+            elif args.training_method == "2DGS":
+                print(f"Running 2D Gaussian Splatting for {scene}...")
+                os.system(
+                    rf"python gaussian_splatting/simple_trainer_2dgs.py --data-dir {scene} --result_dir {args.output_path}/{scene} --data-factor 1.0 --disable_viewer --random-bkgd"
+                )
+            elif args.training_method == "BDS":
+                print(f"Running Beta Deformable Splatting for {scene}...")
+                os.system(
+                    rf"python beta_splatting/train.py -s {scene} -m {args.output_path}/{scene} --random-background"
+                )
+            else:
+                raise ValueError(f"Invalid training method: {args.training_method}")
+
+
+    for scene in lerf_base_path.iterdir():
+        if not args.skip_lifting:
+            print(f"Lifting {scene}...")
+            if args.training_method == "3DGS":
+                os.system(f"python gaussian_splatting/distill.py --data-dir {scene} --ckpt {args.output_path}/{scene}/ckpts/ckpt_29999_rank0.pt --training_method {args.training_method}")
+            elif args.training_method == "2DGS":
+                raise NotImplementedError("2DGS distillation is not implemented yet")
+            elif args.training_method == "BDS":
+                raise NotImplementedError("BDS distillation is not implemented yet")
+            else:
+                raise ValueError(f"Invalid training method: {args.training_method}")
+    
+    for scene in lerf_base_path.iterdir():
+        if not args.skip_evaluation:
+            print(f"Evaluating {scene}...")
+            os.system(f"python gaussian_splatting/eval.py --data-dir {scene} --result_dir {args.output_path}/{scene} --label_dir {Path(args.lerf_ovs) / 'labels' / scene.name}") 
+
+
+
+
+
+def main():
+    args = args_parser()
+
+    if Path(args.lerf_ovs).exists():
+        print("Running evaluation for lerf_ovs dataset...")
+        run_lerf_ovs_evaluation(args)
+        
+    if Path(args.3d_ovs).exists():
+        print("Running evaluation for 3d_ovs dataset...")
+        # TO DO: Implement the evaluation logic for 3d_ovs dataset
+
+    # Create output directory if it doesn't exist
+    if not os.path.exists(args.output_path):
+        os.makedirs(args.output_path)
+
+

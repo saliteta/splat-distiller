@@ -6,16 +6,26 @@ This project is built on top of the [gaussian-splatting](https://github.com/grap
 
 ### Installation Steps
 
+0.**Set Up the Conda Environment:**
+    ```sh
+    conda create -y -n splat_distiller python=3.10
+    conda activate splat_distiller
+    ```
+
 1. **Clone the Repository:**
    ```sh
    git clone --single-branch --branch main https://github.com/saliteta/splat-distiller.git
    cd splat-distiller
    ```
-1. **Set Up the Conda Environment:**
+1. **Set Up the Compiler (NVCC & GCC | MSVC)**
     ```sh
-    conda create -y -n splat_distiller python=3.10
-    conda activate splat_distiller
+    conda install -c nvidia/label/cuda-11.8.0 cuda-toolkit
+    # on linux make sure we are using gcc 11.x, you can install compilers through conda-forge
+    # on windows it seems like the nvcc is based on micorsoft visual compiler, you need to set it to msvc 2019
+    # You might manually set the path like the following
+    set PATH=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\${The version u use}\bin\Hostx64\x64\;%PATH%
     ```
+
 1. **Install [Pytorch](https://pytorch.org/get-started/locally/) (Based on Your CUDA Version)**
     ```sh
     pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
@@ -95,6 +105,12 @@ python feature_extractor.py -s <location> --model <model>
   Select the 2D foundation model from the list: dino16, dinov2, clip, maskclip, vit, resnet50.
 </details>
 <br>
+
+
+### Evaluation Scripts
+```
+python eval.py --data-dir ${The colmap path} --ckpt ${Place you store the trained model} --label-dir ${stored json file}
+```
 
 ## TO DO
 
