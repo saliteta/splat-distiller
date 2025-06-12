@@ -58,15 +58,13 @@ def main(local_rank: int, world_rank, world_size: int, args):
             tokenize(render_tab_state.query_text).cuda()
         ).float()
         text_features = F.normalize(text_features, dim=0)
-        features = F.normalize(features, dim=-1)
+        features = F.normalize(features, dim=0)
 
         # Cosine similarity
         sim = torch.sum(features * text_features, dim=-1, keepdim=True)  # [N,1]
-
-        # Map [-1,1]→[0,1]
-        relevance = (sim + 1) * 0.5
-        
-        return apply_float_colormap(relevance, render_tab_state.colormap)
+        sim = sim.clamp(min=sim.mean())
+        sim = (sim - sim.min()) / (sim.max() - sim.min())
+        return apply_float_colormap(sim, render_tab_state.colormap)
 
     # register and open viewer
     @torch.no_grad()
