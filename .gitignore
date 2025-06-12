@@ -10,4 +10,6 @@ screenshots
 outputs
 data
 experiment
-results
+/result
+/dataset_parser
+/__pycache__
