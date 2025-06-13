@@ -7,7 +7,7 @@ def args_parser():
     parser = ArgumentParser(description="Full evaluation script parameters")
     parser.add_argument("--output_path", default="./eval")
     parser.add_argument("--lerf_ovs", type=str, help="Path to lerf_ovs dataset")
-    parser.add_argument("--3d_ovs", type=str, help="Path to 3d ovs dataset")
+    parser.add_argument("--3d_ovs", type=str, help="Path to 3d ovs dataset", default=None)
     parser.add_argument(
         "--skip_feature_extraction",
         action="store_true",
@@ -82,7 +82,11 @@ def run_lerf_ovs_evaluation(args):
     for scene in lerf_base_path.iterdir():
         if not args.skip_evaluation:
             print(f"Evaluating {scene}...")
-            os.system(f"python gaussian_splatting/eval.py --data-dir {scene} --result_dir {args.output_path}/{scene} --label_dir {Path(args.lerf_ovs) / 'labels' / scene.name}") 
+            os.system(f"python eval.py \
+                      --data-dir {scene} \
+                      --result-dir {args.output_path}/{scene} \
+                      --label-dir {Path(args.lerf_ovs) / 'labels' / scene.name} \
+                      --primitive-mode {args.training_method}") 
 
 
 
@@ -95,12 +99,5 @@ def main():
         print("Running evaluation for lerf_ovs dataset...")
         run_lerf_ovs_evaluation(args)
         
-    if Path(args.3d_ovs).exists():
-        print("Running evaluation for 3d_ovs dataset...")
-        # TO DO: Implement the evaluation logic for 3d_ovs dataset
-
-    # Create output directory if it doesn't exist
-    if not os.path.exists(args.output_path):
-        os.makedirs(args.output_path)
 
 
