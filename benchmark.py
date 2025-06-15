@@ -84,10 +84,8 @@ def run_lerf_ovs_evaluation(args):
             label_path = lerf_base_path / "label" / scene_name
             ckpt = output_path / scene_name / "ckpts" / "ckpt_29999_rank0.pt"
             print(f"Evaluating {scene_name}...")
-            print(f"python eval.py --data-dir {scene} --result-dir {result_scene} --label-dir {label_path} --ckpt {ckpt}")
-            raise
             os.system(
-                f"python eval.py --data-dir {scene} --result_dir {result_scene} --label_dir {label_path}"
+                f"python eval.py --data-dir {scene} --result-dir {result_scene} --label-dir {label_path} --ckpt {ckpt}"
             )
 
 
