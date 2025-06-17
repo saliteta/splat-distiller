@@ -32,7 +32,7 @@ def run_lerf_ovs_evaluation(args):
                     f"Skipping {scene_name} as it is not in the predefined scenes list."
                 )
                 continue
-            result_scene = output_path / scene_name
+            result_scene = output_path / scene_name / args.splat_method
             if args.splat_method == "3DGS":
                 print(f"Running Gaussian Splatting for {scene_name}...")
                 os.system(
@@ -61,7 +61,7 @@ def run_lerf_ovs_evaluation(args):
                 continue
             print(f"Lifting {scene}...")
             if args.splat_method == "3DGS":
-                ckpt = output_path / scene_name / "ckpts" / "ckpt_29999_rank0.pt"
+                ckpt = output_path / scene_name / args.splat_method / "ckpts" / "ckpt_29999_rank0.pt"
                 os.system(
                     f"python gaussian_splatting/distill.py --data-dir {scene} --ckpt {ckpt}"
                 )
@@ -80,9 +80,9 @@ def run_lerf_ovs_evaluation(args):
                     f"Skipping {scene_name} as it is not in the predefined scenes list."
                 )
                 continue
-            result_scene = output_path / scene_name
+            result_scene = output_path / scene_name / args.splat_method
             label_path = lerf_base_path / "label" / scene_name
-            ckpt = output_path / scene_name / "ckpts" / "ckpt_29999_rank0.pt"
+            ckpt = output_path / scene_name / args.splat_method / "ckpts" / "ckpt_29999_rank0.pt"
             print(f"Evaluating {scene_name}...")
             os.system(
                 f"python eval.py --data-dir {scene} --result-dir {result_scene} --label-dir {label_path} --ckpt {ckpt}"

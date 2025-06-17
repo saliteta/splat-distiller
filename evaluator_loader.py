@@ -115,7 +115,7 @@ class base_evaluator(ABC):
             RGB_path.mkdir(exist_ok=True)
 
         if modes == "RGB":
-            for camera in tqdm(self.camera_dataloader, desc="RGB eval"):
+            for camera in tqdm(self.camera_dataloader, desc="RGB Rendering", total=len(self.camera_dataloader)):
                 results: List[torch.Tensor] = self._eval(modes=modes, camera=camera)
                 img = results[0]
                 img = img.numpy()
@@ -127,7 +127,7 @@ class base_evaluator(ABC):
 
         elif modes == "RGB+Feature":
 
-            for camera in tqdm(self.camera_dataloader, desc="RGB+Feature eval"):
+            for camera in tqdm(self.camera_dataloader, desc="RGB+Feature Rendering", total=len(self.camera_dataloader)):
                 results: List[torch.Tensor] = self._eval(modes=modes, camera=camera)
                 img = results[0]
                 feature = results[1]
@@ -154,7 +154,7 @@ class base_evaluator(ABC):
         elif modes == "RGB+Feature+Feature_PCA":
 
             for camera in tqdm(
-                self.camera_dataloader, desc="RGB+Feature+Feature_PCA eval"
+                self.camera_dataloader, desc="RGB+Feature+Feature_PCA Rendering", total=len(self.camera_dataloader)
             ):
                 results: List[torch.Tensor] = self._eval(modes=modes, camera=camera)
                 img = results[0]
