@@ -184,7 +184,7 @@ __global__ void reverse_rasterize_to_gaussians_2dgs_kernel(
 
 #pragma unroll
             for (int k = 0; k < CDIM; ++k) {
-                atomicAdd(&gauss_features[g*CDIM + k], pixel_color[k] * vis);
+                atomicAdd(&gauss_features[g*CDIM + k], pixel_color[k] * vis * vis);
             }
             atomicAdd(&gauss_weights[g], vis * vis);
 

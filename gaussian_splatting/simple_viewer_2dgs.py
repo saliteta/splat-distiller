@@ -12,30 +12,64 @@ from gsplat.rendering import rasterization_2dgs
 
 from nerfview import CameraState, RenderTabState, apply_float_colormap
 from gsplat_viewer_2dgs import GsplatViewer, GsplatRenderTabState
+from sklearn.decomposition import PCA
+from featup.featurizers.maskclip.clip import tokenize
+import os
+
 
 
 def main(local_rank: int, world_rank, world_size: int, args):
     torch.manual_seed(42)
     device = torch.device("cuda", local_rank)
+    clip_model = (
+        torch.hub.load("mhamilton723/FeatUp", "maskclip", use_norm=False)
+        .to(device)
+        .eval()
+        .model.model
+    )
 
     means, quats, scales, opacities, sh0, shN = [], [], [], [], [], []
-    for ckpt_path in args.ckpt:
-        ckpt = torch.load(ckpt_path, map_location=device)["splats"]
-        means.append(ckpt["means"])
-        quats.append(F.normalize(ckpt["quats"], p=2, dim=-1))
-        scales.append(torch.exp(ckpt["scales"]))
-        opacities.append(torch.sigmoid(ckpt["opacities"]))
-        sh0.append(ckpt["sh0"])
-        shN.append(ckpt["shN"])
-    means = torch.cat(means, dim=0)
-    quats = torch.cat(quats, dim=0)
-    scales = torch.cat(scales, dim=0)
-    opacities = torch.cat(opacities, dim=0)
-    sh0 = torch.cat(sh0, dim=0)
-    shN = torch.cat(shN, dim=0)
+    ckpt = torch.load(args.ckpt, map_location=device)["splats"]
+    means = ckpt["means"]
+    quats = F.normalize(ckpt["quats"], p=2, dim=-1)
+    scales = torch.exp(ckpt["scales"])
+    opacities = torch.sigmoid(ckpt["opacities"])
+    sh0 = ckpt["sh0"]
+    shN = ckpt["shN"]
     colors = torch.cat([sh0, shN], dim=-2)
     sh_degree = int(math.sqrt(colors.shape[-2]) - 1)
     print("Number of Gaussians:", len(means))
+
+
+    features = None
+    features_pca = None
+
+    if args.feature_ckpt is None:
+        args.feature_ckpt = os.path.splitext(args.ckpt)[0] + "_features.pt"
+    if os.path.exists(args.feature_ckpt):
+        features = torch.load(args.feature_ckpt, map_location=device)
+        print("Using features from", args.feature_ckpt)
+        features_np = features.cpu().numpy()
+        features_np = features_np.reshape(features_np.shape[0], -1)
+        # Perform PCA to reduce the feature dimensions to 3
+        pca = PCA(n_components=3)
+        features_pca = pca.fit_transform(features_np)
+        features_pca = torch.from_numpy(features_pca).float().to(device)
+
+    @torch.no_grad()
+    def compute_relevance(features, render_tab_state):
+        text_features = clip_model.encode_text(
+            tokenize(render_tab_state.query_text).cuda()
+        ).float()
+        text_features = F.normalize(text_features, dim=0)
+        features = F.normalize(features, dim=0)
+
+        # Cosine similarity
+        sim = torch.sum(features * text_features, dim=-1, keepdim=True)  # [N,1]
+        sim = sim.clamp(min=sim.mean())
+        sim = (sim - sim.min()) / (sim.max() - sim.min())
+        return apply_float_colormap(sim, render_tab_state.colormap)
+
 
     # register and open viewer
     @torch.no_grad()
@@ -47,11 +81,19 @@ def main(local_rank: int, world_rank, world_size: int, args):
         else:
             width = render_tab_state.viewer_width
             height = render_tab_state.viewer_height
+
+        if render_tab_state.text_change and features is not None:
+            render_tab_state.relevance = compute_relevance(features, render_tab_state)
+            render_tab_state.text_change = False
+
+
         c2w = camera_state.c2w
         K = camera_state.get_K((width, height))
         c2w = torch.from_numpy(c2w).float().to(device)
         K = torch.from_numpy(K).float().to(device)
         viewmat = c2w.inverse()
+
+
 
         (
             render_colors,
@@ -72,9 +114,13 @@ def main(local_rank: int, world_rank, world_size: int, args):
             width=width,
             height=height,
             sh_degree=(
-                min(render_tab_state.max_sh_degree, sh_degree)
-                if sh_degree is not None
-                else None
+                None
+                if render_tab_state.render_mode in ["feature", "relevance"]
+                else (
+                    min(render_tab_state.max_sh_degree, sh_degree)
+                    if sh_degree is not None
+                    else None
+                )
             ),
         )
         render_tab_state.total_gs_count = len(means)

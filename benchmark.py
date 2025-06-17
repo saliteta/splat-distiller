@@ -45,23 +45,23 @@ def run_lerf_ovs_evaluation(args):
     for scene in lerf_base_path.iterdir():
         # Do something to scene
         if not args.skip_feature_extraction:
-            print(f"Extracting features for {scene}...")
+            print(f"Extracting features for {scene.name}...")
             os.system(f"python feature_extractor.py -s {scene}")
         if not args.skip_training:
             if args.training_method == "3DGS":
-                print(f"Running Gaussian Splatting for {scene}...")
+                print(f"Running Gaussian Splatting for {scene.name}...")
                 os.system(
-                    rf"python gaussian_splatting/simple_trainer.py default --data-dir {scene} --result_dir {args.output_path}/{scene} --data-factor 1.0 --disable_viewer --random-bkgd"
+                    rf"python gaussian_splatting/simple_trainer.py default --data-dir {scene} --result_dir {args.output_path}/{scene.name}/3DGS --data-factor 1 --disable_viewer --random-bkgd"
                 )
             elif args.training_method == "2DGS":
                 print(f"Running 2D Gaussian Splatting for {scene}...")
                 os.system(
-                    rf"python gaussian_splatting/simple_trainer_2dgs.py --data-dir {scene} --result_dir {args.output_path}/{scene} --data-factor 1.0 --disable_viewer --random-bkgd"
+                    rf"python gaussian_splatting/simple_trainer_2dgs.py --data-dir {scene} --result_dir {args.output_path}/{scene.name}/2DGS --data-factor 1 --disable_viewer --random-bkgd"
                 )
             elif args.training_method == "BDS":
                 print(f"Running Beta Deformable Splatting for {scene}...")
                 os.system(
-                    rf"python beta_splatting/train.py -s {scene} -m {args.output_path}/{scene} --random-background"
+                    rf"python beta_splatting/train.py -s {scene} -m {args.output_path}/{scene.name}/BDS --random-background"
                 )
             else:
                 raise ValueError(f"Invalid training method: {args.training_method}")
@@ -69,9 +69,9 @@ def run_lerf_ovs_evaluation(args):
 
     for scene in lerf_base_path.iterdir():
         if not args.skip_lifting:
-            print(f"Lifting {scene}...")
+            print(f"Lifting {scene.name}...")
             if args.training_method == "3DGS":
-                os.system(f"python gaussian_splatting/distill.py --data-dir {scene} --ckpt {args.output_path}/{scene}/ckpts/ckpt_29999_rank0.pt --training_method {args.training_method}")
+                os.system(f"python gaussian_splatting/distill.py --data-dir {scene} --ckpt {args.output_path}/{scene.name}/3DGS/ckpts/ckpt_29999_rank0.pt")
             elif args.training_method == "2DGS":
                 raise NotImplementedError("2DGS distillation is not implemented yet")
             elif args.training_method == "BDS":
@@ -84,8 +84,9 @@ def run_lerf_ovs_evaluation(args):
             print(f"Evaluating {scene}...")
             os.system(f"python eval.py \
                       --data-dir {scene} \
-                      --result-dir {args.output_path}/{scene} \
-                      --label-dir {Path(args.lerf_ovs) / 'labels' / scene.name} \
+                      --result-dir {args.output_path}/{scene.name}/{args.training_method} \
+                      --ckpt {args.output_path}/{scene.name}/{args.training_method}/ckpts/ckpt_29999_rank0.pt \
+                      --label-dir {Path(args.lerf_ovs) / 'label' / scene.name} \
                       --primitive-mode {args.training_method}") 
 
 
@@ -100,4 +101,5 @@ def main():
         run_lerf_ovs_evaluation(args)
         
 
-
+if __name__ == "__main__":
+    main()

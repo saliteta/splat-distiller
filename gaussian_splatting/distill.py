@@ -59,7 +59,7 @@ class Runner:
             (means.shape[0]), dtype=torch.float32, device=device
         )
 
-        for i, data in tqdm(enumerate(trainloader), desc="Distilling features"):
+        for i, data in tqdm(enumerate(trainloader), desc="Distilling features", total=len(trainloader)):
             camtoworlds = data["camtoworld"].to(device)
             Ks = data["K"].to(device)
             pixels = data["image"].to(device) / 255.0
@@ -98,7 +98,6 @@ class Runner:
             splat_weights[ids] += splat_weights_per_image
             del splat_features_per_image, splat_weights_per_image, ids
             torch.cuda.empty_cache()
-
         splat_features /= splat_weights[..., None]
         splat_features = torch.nan_to_num(splat_features, nan=0.0)
 
