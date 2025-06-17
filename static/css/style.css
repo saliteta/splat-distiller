@@ -91,7 +91,7 @@ a:hover {
 
 /* Code blocks */
 code, pre {
-  background-color: #f4f4f4;
+  background-color: #f4f4f4 !important;
   padding: 8px;
   border-radius: 5px;
   font-size: 0.9rem;
@@ -162,4 +162,9 @@ code, pre {
     left: 0;
     width: 100%;
     height: 100%;
+}
+@media (prefers-color-scheme: dark) {
+  html, body, *, *::before, *::after {
+    background-color: white !important;
+  }
 }
