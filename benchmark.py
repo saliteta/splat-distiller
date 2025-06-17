@@ -89,9 +89,9 @@ def run_lerf_ovs_evaluation(args):
             )
 
 
-if __name__ == "__main__":
+def args_parser():
     parser = ArgumentParser(description="Evaluation script parameters")
-    parser.add_argument("--output_path", default="eval")
+    parser.add_argument("--output_path", default="results")
     parser.add_argument("--lerf_ovs", type=str, help="Path to lerf_ovs dataset")
     parser.add_argument("--3d_ovs", type=str, help="Path to 3d ovs dataset", default=None)
     parser.add_argument(
@@ -123,6 +123,8 @@ if __name__ == "__main__":
         action="store_true",
         help="Skip evaluation step",
     )
+
+    parser.add_argument("--training_method", default="3DGS", help="training method to use, can be choose from Gaussian Splatting, 2DGS, beta deformable splatting", choices=["3DGS", "2DGS", "BDS"])
 
     return parser.parse_args()
 
