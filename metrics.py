@@ -126,7 +126,7 @@ class LERFMetrics(Metrics):
         save_path_metrics_images = save_path / "metrics_images"
         save_path_metrics_images.mkdir(parents=True, exist_ok=True)
 
-        for frame in tqdm(self.labels):
+        for frame in tqdm(self.labels, desc="Computing metrics"):
             json_path = self.labels[frame]["json_path"]
             gt_image_path = Path(self.labels[frame]["image_path"])
             gt_image = cv2.imread(str(gt_image_path))

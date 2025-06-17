@@ -59,7 +59,7 @@ class Runner:
             (means.shape[0]), dtype=torch.float32, device=device
         )
 
-        for i, data in tqdm(enumerate(trainloader), desc="Distilling features"):
+        for i, data in tqdm(enumerate(trainloader), desc="Distilling features", total=len(trainloader)):
             camtoworlds = data["camtoworld"].to(device)
             Ks = data["K"].to(device)
             pixels = data["image"].to(device) / 255.0
