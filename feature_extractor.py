@@ -8,6 +8,8 @@ from tqdm import tqdm
 # Supported models
 SUPPORTED_MODELS = ["dino16", "dinov2", "clip", "maskclip", "vit", "resnet50"]
 
+SUPPORTED_MODELS = ["dino16", "dinov2", "clip", "maskclip", "vit", "resnet50"]
+
 
 def parse_arguments():
     """
@@ -20,25 +22,40 @@ def parse_arguments():
         description="Process images to generate RGBF arrays using specified foundation model."
     )
 
+    parser = argparse.ArgumentParser(
+        description="Process images to generate RGBF arrays using specified foundation model."
+    )
+
     parser.add_argument(
+        "--source_path",
+        "-s",
         "--source_path",
         "-s",
         type=str,
         default="data",
         help="Path to the image input folder.",
+        default="data",
+        help="Path to the image input folder.",
     )
+
 
     parser.add_argument(
         "--model",
+        "--model",
         type=str,
         default="maskclip",
+        default="maskclip",
         choices=SUPPORTED_MODELS,
+        help=f"Select the 2D foundation model from the list: {', '.join(SUPPORTED_MODELS)}.",
         help=f"Select the 2D foundation model from the list: {', '.join(SUPPORTED_MODELS)}.",
     )
 
     parser.add_argument("--device", type=str, default="cuda", help="pytorch device")
 
+    parser.add_argument("--device", type=str, default="cuda", help="pytorch device")
+
     return parser.parse_args()
+
 
 
 def load_upsampler(model_name, device):
@@ -56,9 +73,13 @@ def load_upsampler(model_name, device):
     upsampler = torch.hub.load("mhamilton723/FeatUp", model_name, use_norm=False).to(
         device
     )
+    upsampler = torch.hub.load("mhamilton723/FeatUp", model_name, use_norm=False).to(
+        device
+    )
     upsampler.eval()  # Set model to evaluation mode
     print(f"Successfully loaded model '{model_name}'.")
     return upsampler
+
 
 
 def main():
@@ -73,7 +94,11 @@ def main():
         print(
             f"Error: The specified source directory '{data_dir}' does not exist or is not a directory."
         )
+        print(
+            f"Error: The specified source directory '{data_dir}' does not exist or is not a directory."
+        )
         exit(1)
+
 
     # Set device
     device = args.device
@@ -100,8 +125,15 @@ def main():
     image_files = [
         f for f in all_files if any(f.lower().endswith(ext) for ext in supported_ext)
     ]
+    supported_ext = {".png", ".jpg", ".jpeg", ".bmp", ".tiff"}
+    image_files = [
+        f for f in all_files if any(f.lower().endswith(ext) for ext in supported_ext)
+    ]
 
     if len(image_files) == 0:
+        print(
+            f"No supported image files found in '{data_dir}'. Supported extensions: {', '.join(supported_ext)}."
+        )
         print(
             f"No supported image files found in '{data_dir}'. Supported extensions: {', '.join(supported_ext)}."
         )
@@ -111,6 +143,7 @@ def main():
     for filename in tqdm(image_files, desc="Extracting features", unit="img"):
         file_path = os.path.join(data_dir, "images", filename)
 
+
         # (Optional) if you still want to skip non-images despite filtering earlier
         if not any(filename.lower().endswith(ext) for ext in supported_ext):
             tqdm.write(f"Skipping non-image file: {filename}")
@@ -119,6 +152,7 @@ def main():
         image = Image.open(file_path).convert("RGB")
         image_tensor = transform(image).unsqueeze(0).to(device)
 
+
         # Generate high-resolution features
         with torch.no_grad():
             hr_feats = upsampler(image_tensor)
@@ -126,11 +160,14 @@ def main():
         # Permute to (H, W, F)
         hr_feats = hr_feats.squeeze(0).permute(1, 2, 0)
 
+
         # Save as a .pt
         base_name, _ = os.path.splitext(filename)
         out_path = os.path.join(features_output_dir, f"{base_name}.pt")
         torch.save(hr_feats, out_path)
 
 
+
 if __name__ == "__main__":
     main()
+

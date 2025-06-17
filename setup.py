@@ -7,7 +7,7 @@ install_requires = [
     # Git dependencies
     "pycolmap @ git+https://github.com/rmbrualla/pycolmap@cc7ea4b7301720ac29287dbe450952511b32125e",
     "fused-ssim @ git+https://github.com/rahul-goel/fused-ssim@1272e21a282342e89537159e4bad508b19b34157",
-    "FeatUp @ git+https://github.com/opipari/FeatUp.git@main",
+    "FeatUp @ git+https://github.com/mhamilton723/FeatUp.git@main",
     "CLIP @ git+https://github.com/mhamilton723/CLIP.git@main",
     # PyPI dependencies
     "viser",
