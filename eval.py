@@ -6,7 +6,9 @@ It should be multi-modal evaluation, including:
 - Beta Deformable Splatting
 """
 
+from tqdm import tqdm
 from gaussian_splatting.datasets.colmap import Parser, Dataset
+import os
 from pathlib import Path
 import argparse
 from gaussian_splatting.primitives import GaussianPrimitive
@@ -34,14 +36,6 @@ def args_parser():
         required=False,
         help="Path to the feature checkpoint, default is the same as the ckpt but with _features.pt",
     )
-
-    parser.add_argument(
-        "--primitive-mode",
-        type=str,
-        default="gaussian",
-        help="Primitive mode to evaluate the results",
-    )
-
     return parser.parse_args()
 
 
@@ -71,28 +65,13 @@ def load_evaluator(args):
 
 def main():
     args = args_parser()
-    if args.primitive_mode == "3DGS":
-    # Load data and save the results
-        evaluator = load_evaluator(args)
-        evaluator.eval(
-            Path(args.result_dir), modes="RGB+Feature+Feature_PCA", feature_saving_mode="pt"
-        )
-    elif args.primitive_mode == "2DGS":
-        raise NotImplementedError("2DGS is not implemented yet")
-        # Load data and save the results
-        evaluator = load_evaluator(args)
-        evaluator.eval(
-            Path(args.result_dir), modes="RGB+Feature+Feature_PCA", feature_saving_mode="pt"
-        )
-    elif args.primitive_mode == "BDS":
-        raise NotImplementedError("BDS is not implemented yet")
-        # Load data and save the results
-        evaluator = load_evaluator(args)
-        evaluator.eval(
-            Path(args.result_dir), modes="RGB+Feature+Feature_PCA", feature_saving_mode="pt"
-        )
 
-    # Compute metrics
+    # Load data
+    evaluator = load_evaluator(args)
+    evaluator.eval(
+        Path(args.result_dir), modes="RGB+Feature+Feature_PCA", feature_saving_mode="pt"
+    )
+
     metrics = LERFMetrics(
         label_folder=Path(args.label_dir), rendered_folder=Path(args.result_dir)
     )

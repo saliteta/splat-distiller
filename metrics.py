@@ -165,11 +165,10 @@ class LERFMetrics(Metrics):
             frame_names.append(basename)
             frame_metrics_list.append(
                 {
-                    "frame_name/metrics_name": basename,
                     "mIoU": float(feature_metrics["mIoU"]),
                     "mAcc": float(feature_metrics["mAcc"]),
                     "SSIM": float(image_metrics["ssim"]),
-                    "PSNR": float(image_metrics["psnr"])
+                    "PSNR": float(image_metrics["psnr"]),
                 }
             )
 
@@ -187,8 +186,7 @@ class LERFMetrics(Metrics):
             metrics_images.save(save_path / "metrics_images" / f"{basename}.png")
 
         # Create DataFrame for per-frame metrics
-        metrics_df = pd.DataFrame(frame_metrics_list)
-        metrics_df.set_index('frame_name/metrics_name', inplace=True)
+        metrics_df = pd.DataFrame(frame_metrics_list, index=frame_names)
 
         # Compute per-scene mean
         scene_mean = metrics_df.mean()
@@ -196,6 +194,7 @@ class LERFMetrics(Metrics):
 
         # Append mean row to DataFrame
         scene_mean_df = scene_mean.to_frame().T
+        scene_mean_df.index = pd.Index(["mean"])
         metrics_df = pd.concat([metrics_df, scene_mean_df])
 
         # Save DataFrame with mean row

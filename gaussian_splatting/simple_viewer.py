@@ -52,11 +52,6 @@ def main(local_rank: int, world_rank, world_size: int, args):
         features_pca = pca.fit_transform(features_np)
         features_pca = torch.from_numpy(features_pca).float().to(device)
 
-        feature_pca_min = features_pca.min(dim=0, keepdim=True).values
-        feature_pca_max = features_pca.max(dim=0, keepdim=True).values
-
-        features_pca = ((features_pca - feature_pca_min) / (feature_pca_max - feature_pca_min)-0.5) * 2
-
     @torch.no_grad()
     def compute_relevance(features, render_tab_state):
         text_features = clip_model.encode_text(

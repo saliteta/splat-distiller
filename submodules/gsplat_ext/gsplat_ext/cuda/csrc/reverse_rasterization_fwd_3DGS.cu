@@ -135,7 +135,7 @@ namespace cg = cooperative_groups;
                 const scalar_t *pixel_color = rendered_colors + pix_id * CDIM;
     #pragma unroll
                 for (int k = 0; k < CDIM; ++k) {
-                    atomicAdd(&gauss_features[g*CDIM + k], pixel_color[k] * vis * vis);
+                    atomicAdd(&gauss_features[g*CDIM + k], pixel_color[k] * vis);
                 }
                 atomicAdd(&gauss_weights[g], vis * vis);
 
