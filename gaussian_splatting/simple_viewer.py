@@ -51,7 +51,16 @@ def main(local_rank: int, world_rank, world_size: int, args):
         pca = PCA(n_components=3)
         features_pca = pca.fit_transform(features_np)
         features_pca = torch.from_numpy(features_pca).float().to(device)
-
+        mins   = features_pca.min(dim=0).values    # shape (3,)
+        maxs   = features_pca.max(dim=0).values    # shape (3,)
+        
+        # 2) compute range and add eps to avoid zero-div
+        ranges = maxs - mins
+        eps    = 1e-8
+        
+        # 3) normalize into [0,1]
+        features_pca = (features_pca - mins) / (ranges + eps)
+        
     @torch.no_grad()
     def compute_relevance(features, render_tab_state):
         text_features = clip_model.encode_text(
