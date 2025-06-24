@@ -1,4 +1,26 @@
 import numpy as np
+from pathlib import Path
+from PIL import Image
+import torch
+
+
+
+
+
+def load_image_features(image_path: Path, feature_folder: Path) -> torch.Tensor:
+    feature_path = image_path.parent.parent /feature_folder / f'{image_path.stem}.pt'
+    mask_path = image_path.parent.parent /'masks' / f'{image_path.stem}.png'
+    mask = Image.open(mask_path)
+    mask_array = np.array(mask.convert("L"))
+    masks = torch.tensor(((np.arange(mask_array.max()+1))[:, None, None] == mask_array[None, :, :]), dtype=torch.float32).to('cuda')
+    mask_features = torch.load(feature_path).to('cuda')
+
+    mask_features = torch.einsum("b h w, b c -> h w c", masks, mask_features)
+
+    mask_features /= mask_features.norm(dim=-1, keepdim=True)
+
+    return mask_features
+
 
 
 def similarity_from_cameras(c2w, strict_scaling=False, center_method="focus"):

@@ -28,6 +28,7 @@ class Runner:
             self.parser,
             split="train",
             load_features=True,
+            feature_folder=args.feature_folder,
         )
         self.valset = Dataset(self.parser, split="val")
         self.scene_scale = self.parser.scene_scale * 1.1
@@ -59,7 +60,7 @@ class Runner:
             (means.shape[0]), dtype=torch.float32, device=device
         )
 
-        for i, data in tqdm(enumerate(trainloader), desc="Distilling features"):
+        for i, data in tqdm(enumerate(trainloader), desc="Distilling features", total=len(trainloader)):
             camtoworlds = data["camtoworld"].to(device)
             Ks = data["K"].to(device)
             pixels = data["image"].to(device) / 255.0
@@ -137,6 +138,12 @@ if __name__ == "__main__":
         type=int,
         default=8,
         help="Every N images there is a test image",
+    )
+    parser.add_argument(
+        "--feature-folder",
+        type=str,
+        default=None,
+        help="Path to the feature folder",
     )
     args = parser.parse_args()
     cli(main, args, verbose=True)

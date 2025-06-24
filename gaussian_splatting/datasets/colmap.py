@@ -10,14 +10,14 @@ from PIL import Image
 from pycolmap import SceneManager
 from tqdm import tqdm
 from typing_extensions import assert_never
-
+from pathlib import Path
 from .normalize import (
     align_principal_axes,
     similarity_from_cameras,
     transform_cameras,
     transform_points,
+    load_image_features,
 )
-
 
 def _get_rel_paths(path_dir: str) -> List[str]:
     """Recursively get relative paths of files in a directory."""
@@ -358,12 +358,14 @@ class Dataset:
         patch_size: Optional[int] = None,
         load_depths: bool = False,
         load_features: bool = False,
+        feature_folder: Optional[Path] = None,
     ):
         self.parser = parser
         self.split = split
         self.patch_size = patch_size
         self.load_depths = load_depths
         self.load_features = load_features
+        self.feature_folder = feature_folder
         indices = np.arange(len(self.parser.image_names))
         if split == "train":
             self.indices = indices[indices % self.parser.test_every != 0]
@@ -437,10 +439,13 @@ class Dataset:
         if self.load_features:
             # Load features if available.
             base_name = os.path.splitext(self.parser.image_names[index])[0]
-            feature_path = os.path.join(
-                self.parser.data_dir, "features", f"{base_name}.pt"
-            )
-            data["features"] = torch.load(feature_path)
+            if self.feature_folder is not None:
+                data["features"] = load_image_features(Path(self.parser.image_paths[index]), Path(self.feature_folder))
+            else:
+                feature_path = os.path.join(
+                    self.parser.data_dir, "features", f"{base_name}.pt"
+                )
+                data["features"] = torch.load(feature_path)
 
         return data
 
