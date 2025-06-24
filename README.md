@@ -112,7 +112,45 @@ python feature_extractor.py -s <location> --model <model>
 python eval.py --data-dir ${The colmap path} --ckpt ${Place you store the trained model} --label-dir ${stored json file}
 ```
 
-## TO DO
+### All in One Scripts
+To run feature extraction, model training, feature lifting, rendering, and evaluation metrics in one scripts for lerf_ovs, we prepare the following scripts:
+- Download Dataset
+```
+gdown 1QF1Po5p5DwTjFHu6tnTeYs_G0egMVmHt
+unzip lerf_ovs
+rm lerf_ovs.zip
+python benchmark.py --lerf_ovs lerf_ovs --output_path results
+```
+The all the results should be in "results" folder
+The results seperated by the scene name, and it has:
+1. ckpts: The trained geometry, and lifted features
+2. Features: Rendered Features from evaluation camera pose
+3. Feature_PCA: Rendered Features after PCA for visualization from evaluation camera pose
+4. metrics_images: Segmented results compare to ground truth
+5. renderes: More rendered RGB images from different angles, at different training iteration
+6. RGB: final rendered RGB at evaluation camera pose
+7. frame_metrics.csv: per_frame calcualted results and whole scene average
+8. others for training logs
 
-- Adding training guidance
-- Loading and so on
+
+There are some examples: 
+<table>
+  <tr>
+    <td><img src="assets/feature_pca.jpg" Height="300"/></td>
+    <td><img src="assets/metrics_image.png" Height="300"/></td>
+  </tr>
+</table>
+left one are the feature PCA, and the right one is the metrics image
+
+
+### Visualization and Query in 3D
+To visualize and query in 3D, one can do the following. If one is using 3DGS 
+cd gaussian_spaltting
+python simple_viewer.py --ckpt {in the ckpt folder, there is a ckpt_29999} --feature_ckpt {optional, default is ckpt_29999_feature at the same folder}
+examples: left one is when one visualize in relevance mode, input eggs, and the right one is the rendered rgb
+<table>
+  <tr>
+    <td><img src="assets/eggs.jpg" width="300"/></td>
+    <td><img src="assets/rgb_render.jpg" width="300"/></td>
+  </tr>
+</table>
