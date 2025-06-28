@@ -174,3 +174,11 @@ feature_converter.py --help
 ```
 One script to generate langsplat original data
 One script to convert feature to our format
+
+
+### LangSplat Feature and Positional Embeddings
+Currently, we add all those information into the metrics.py
+One need to explicityly name the --text-encoder to SAMOpenCLIP to make it work
+```
+python eval.py --text-encoder {sam_clip} ...
+```
