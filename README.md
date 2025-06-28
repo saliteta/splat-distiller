@@ -154,3 +154,23 @@ examples: left one is when one visualize in relevance mode, input eggs, and the 
     <td><img src="assets/rgb_render.jpg" width="300"/></td>
   </tr>
 </table>
+
+
+
+### Adapting LAGA format Feature Extraction
+LAGA and OpenGaussian and LangSplat all use the same way of feature extraction, it works better on at least Figurines in terms of metrics performance, however, it usually takes around 
+2 hours to process one scene. By utilizing their preprocessed feature, we can further bust our mIoU at the cost of time.
+to use, simply do the following
+```
+pip install git+https://github.com/facebookresearch/segment-anything.git
+pip install git+https://github.com/minghanqin/segment-anything-langsplat.git
+```
+
+Then we can run:
+```
+cd laga
+pre_processing.py --help
+feature_converter.py --help 
+```
+One script to generate langsplat original data
+One script to convert feature to our format
