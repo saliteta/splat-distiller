@@ -14,35 +14,85 @@
 """
 
 from pathlib import Path
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Literal
 from abc import ABC, abstractmethod
 import json
 import torch
 import cv2
 import numpy as np
 from fused_ssim import fused_ssim
-from featup.featurizers.maskclip.clip import tokenize
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 import pandas as pd
 from tqdm import tqdm
 from PIL import Image
+from gaussian_splatting.text_encoder import TextEncoder
+from sklearn.decomposition import PCA
+import torch.nn.functional as F
+import math
 
 BACKGROUND_WORDS = [
     "floor",
     "walls",
     "ceiling",
     "background",
-    "road",
-    "sky",
-    "table",
-    "chair",
-    "bed",
-    "sofa",
-    "cabinet",
-    "shelf",
-    "other",
+    "red green blue"
 ]
+
+
+def pca_reduce(X: torch.Tensor, c_prime: int) -> torch.Tensor:
+    """
+    Perform PCA on X (n × c) to reduce it to shape (n × c_prime) using scikit-learn (CPU).
+
+    Args:
+        X:        Tensor of shape (n, c)
+        c_prime:  Target number of principal components
+
+    Returns:
+        Tensor of shape (n, c_prime) containing the projected data.
+    """
+    # 1) Move to CPU and convert to NumPy
+    X_np = X.detach().cpu().numpy()
+    
+    # 2) Fit PCA and transform
+    pca = PCA(n_components=c_prime)
+    X_reduced_np = pca.fit_transform(X_np)
+    
+    # 3) Convert back to torch.Tensor (on CPU)
+    return torch.from_numpy(X_reduced_np).cuda()
+
+def positional_embedding(
+    positions: torch.Tensor, 
+    x_max: int, 
+    y_max: int, 
+    num_freqs: int = 3
+) -> torch.Tensor:
+    """
+    positions: (...,2) tensor of (x, y) pixel coords
+    x_max, y_max: maximum x and y values for normalization
+    num_freqs: number of frequency bands per axis;
+               total output dim = 4 * num_freqs (→ 16 if num_freqs=4)
+    returns: (..., 4*num_freqs) positional embedding
+    """
+    # normalize to [0,1]
+    x = positions[..., 0] / x_max
+    y = positions[..., 1] / y_max
+
+    # create frequency bands: [1, 2, 4, 8, ...]
+    freq_bands = 2.0 ** torch.arange(num_freqs, device=positions.device, dtype=positions.dtype)  # (num_freqs,)
+
+    # angles = pos_norm * freq * π
+    angles_x = x.unsqueeze(-1) * freq_bands * math.pi  # (..., num_freqs)
+    angles_y = y.unsqueeze(-1) * freq_bands * math.pi  # (..., num_freqs)
+
+    # stack sin & cos per axis
+    pe_x = torch.cat([angles_x.sin(), angles_x.cos()], dim=-1)  # (..., 2*num_freqs)
+    pe_y = torch.cat([angles_y.sin(), angles_y.cos()], dim=-1)  # (..., 2*num_freqs)
+
+    # final embedding: [sin_x,cos_x, sin_y,cos_y] across freqs
+    pe = torch.cat([pe_x, pe_y], dim=-1)                        # (..., 4*num_freqs)
+
+    return pe
 
 
 class Metrics(ABC):
@@ -67,15 +117,12 @@ class Metrics(ABC):
 
 
 class LERFMetrics(Metrics):
-    def __init__(self, label_folder: Path, rendered_folder: Path):
+    def __init__(self, label_folder: Path, rendered_folder: Path, text_encoder: Literal["maskclip", "SAM2OpenCLIP", "SAMOpenCLIP"], enable_pca: int|None = None):
         super().__init__(label_folder, rendered_folder)
-        self.tokenzier = tokenize
-        self.text_encoder = torch.hub.load(
-            "mhamilton723/FeatUp", "maskclip", use_norm=False
-        ).model.model
-        self.text_encoder.eval()
-        self.text_encoder.to("cuda")
+        self.text_encoder = TextEncoder(text_encoder, torch.device("cuda"))
         self.background_text = BACKGROUND_WORDS
+        self.enable_pca = enable_pca
+        self.position_embedding_weight = 0.008
 
     def load_labels(self) -> Dict[str, Any]:
         """
@@ -272,21 +319,11 @@ class LERFMetrics(Metrics):
         Compute the metrics for the feature
         """
         # 1. Get the text features
-        tokens = self.tokenzier(unique_categories + self.background_text).to("cuda")
-        text_features = self.text_encoder.encode_text(tokens).float().squeeze()
-        feature_map_reshaped = rendered_feature.view(
-            -1, rendered_feature.shape[-1]
-        )  # Flatten spatial dims
-        text_features = text_features / text_features.norm(
-            dim=-1, keepdim=True
-        )  # Normalize text features
-        feature_map_reshaped = feature_map_reshaped / feature_map_reshaped.norm(
-            dim=-1, keepdim=True
-        )  # Normalize feature map
-        # Compute similarity (logits)
-        attention_scores = torch.matmul(
-            feature_map_reshaped, text_features.T
-        )  # Shape: (H*W, num_classes)
+        texts = unique_categories + self.background_text
+        text_features = self.text_encoder.encode_text(texts).float().squeeze()
+        #rendered_feature, text_features = self.pca_reduce(rendered_feature, text_features, self.enable_pca)
+
+        attention_scores = self.compute_attention_with_positional_embedding(rendered_feature, text_features)
         predicted_labels = torch.argmax(
             attention_scores, dim=-1
         )  # Get highest similarity category index
@@ -322,6 +359,50 @@ class LERFMetrics(Metrics):
         metrics["segmentation_masks"] = segmentation_masks
 
         return metrics
+
+
+
+    def compute_attention_with_positional_embedding(
+        self,
+        features_hw_c: torch.Tensor,   # (H, W, C)
+        text_feats_b_c: torch.Tensor,  # (B, C)
+    ) -> torch.Tensor:                 # → (H, W, B)
+        H, W, C = features_hw_c.shape
+        B, _     = text_feats_b_c.shape
+
+        # 1) normalize
+        f = F.normalize(features_hw_c, dim=-1)   # (H,W,C)
+        t = F.normalize(text_feats_b_c, dim=-1)  # (B,C)
+
+        # 2) standard attention score
+        attn = torch.einsum('hwc,bc->hwb', f, t)  # (H,W,B)
+
+        # 3) find the argmax location for each text‐class b
+        flat   = attn.view(-1, B)                # (H*W, B)
+        idx    = flat.argmax(dim=0)              # (B,) flat indices
+        ys     = idx // W
+        xs     = idx %  W
+        pos_b2 = torch.stack([xs, ys], dim=-1).float().to(features_hw_c.device)  # (B,2)
+
+        # 4) build the positional grid for all pixels
+        y_coords, x_coords = torch.meshgrid(
+            torch.arange(H, device=features_hw_c.device),
+            torch.arange(W, device=features_hw_c.device),
+            indexing='ij'
+        )
+        pos_hw2 = torch.stack([x_coords, y_coords], dim=-1).float()  # (H, W, 2)
+
+        # 5) compute embeddings
+        pos_emb_hw = positional_embedding(pos_hw2, x_max=W-1, y_max=H-1)  # (H, W, 4)
+        pos_emb_b  = positional_embedding(pos_b2,  x_max=W-1, y_max=H-1)  # (B, 4)
+
+        # 6) positional affinity score between each pixel and each class‐peak
+        pos_score = torch.einsum('hwe,be->hwb', pos_emb_hw, pos_emb_b)    # (H, W, B)
+
+        # 7) combine
+        return attn + self.position_embedding_weight * pos_score     
+
+
 
     def mIoU(
         self, segmentation_masks: torch.Tensor, masks_tensor: torch.Tensor
@@ -549,3 +630,6 @@ class LERFMetrics(Metrics):
             result = torch.tensor(np.array(saved_img)).float()
 
         return result
+
+
+

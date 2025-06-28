@@ -36,6 +36,9 @@ def args_parser():
         required=False,
         help="Path to the feature checkpoint, default is the same as the ckpt but with _features.pt",
     )
+    parser.add_argument(
+        "--text-encoder", type=str, default="maskclip", help="text encoder to use", choices=["maskclip", "SAM2OpenCLIP", "SAMOpenCLIP"]
+    )
     return parser.parse_args()
 
 
@@ -71,9 +74,13 @@ def main():
     evaluator.eval(
         Path(args.result_dir), modes="RGB+Feature+Feature_PCA", feature_saving_mode="pt"
     )
-
+    if args.text_encoder == "SAM2OpenCLIP":
+        enable_pca = 256
+    else:
+        enable_pca = None
+        
     metrics = LERFMetrics(
-        label_folder=Path(args.label_dir), rendered_folder=Path(args.result_dir)
+        label_folder=Path(args.label_dir), rendered_folder=Path(args.result_dir), text_encoder=args.text_encoder, enable_pca=enable_pca
     )
     metrics.compute_metrics(save_path=Path(args.result_dir))
 
