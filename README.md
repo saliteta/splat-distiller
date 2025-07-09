@@ -182,3 +182,32 @@ One need to explicityly name the --text-encoder to SAMOpenCLIP to make it work
 ```
 python eval.py --text-encoder {sam_clip} ...
 ```
+
+
+### We re-write the CLIP+SAM feature + Cluster for segmentation
+- It is still lifting, actually really fast
+- We adding the quick cluster, a little hard to install on 4090, changed to rapidsai 25.06
+- CUDA toolkit 12.6, pytorch 2.7.1 
+- Should additionally install omega-conf and hydra
+
+to run modify the config/for_metrics.yaml part and run:
+```
+python benchmark.py
+```
+
+
+### Some examples
+<table>
+  <tr>
+    <td><img src="assets/feature_pca_sam+clip.jpg" width="300"/></td>
+    <td><img src="assets/sam+clip.png" width="300"/></td>
+  </tr>
+</table>
+
+
+<table>
+  <tr>
+    <td><img src="assets/eggs_sam+clip.png" width="300"/></td>
+    <td><img src="assets/viwereggs_sam+clip.png"width="300"/></td>
+  </tr>
+</table>
