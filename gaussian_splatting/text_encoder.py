@@ -1,12 +1,14 @@
-import typing
+from typing import List
 import torch
 import open_clip
+import typing
 
 
 class TextEncoder:
-    def __init__(self, model_name: str, device: torch.device):
+    def __init__(self, model_name: str, device: torch.device, prototypes: torch.Tensor | None = None):
         self.model_name = model_name
         self.device = device
+        self.prototypes = prototypes
         if model_name == "maskclip":
             from featup.featurizers.maskclip.clip import tokenize
             self.model = typing.cast(torch.nn.Module, torch.hub.load("mhamilton723/FeatUp", "maskclip", use_norm=False).model.model)
@@ -26,12 +28,21 @@ class TextEncoder:
         else:
             raise ValueError(f"Model {model_name} not supported")
     
-    def encode_text(self, text: str):
+    def encode_text(self, text: List[str]):
         if self.model_name == "maskclip":
-            return self.model.encode_text(self.tokenizer(text).cuda())
+            features = self.model.encode_text(self.tokenizer(text).cuda())
         elif self.model_name == "SAM2OpenCLIP":
-            return self.model.encode_text(self.tokenizer(text).cuda())[:, :512]
+            features = self.model.encode_text(self.tokenizer(text).cuda())[:, :512]
         elif self.model_name == "SAMOpenCLIP":
-            return self.model.encode_text(self.tokenizer(text).cuda())[:, :512]
+            features = self.model.encode_text(self.tokenizer(text).cuda())[:, :512]
         else:
             raise ValueError(f"Model {self.model_name} not supported")
+        return self.quantize_text(features)
+    
+    def quantize_text(self, features: torch.Tensor):
+        if self.prototypes is not None:
+            attention_scores = torch.einsum("fc,bc->fb", features, self.prototypes)
+            prototypes_indices = torch.argmax(attention_scores, dim=-1)
+            return self.prototypes[prototypes_indices]
+        else:
+            return features

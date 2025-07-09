@@ -14,6 +14,8 @@ import argparse
 from gaussian_splatting.primitives import GaussianPrimitive
 from evaluator_loader import lerf_evaluator
 from metrics import LERFMetrics
+from gaussian_splatting.text_encoder import TextEncoder
+import torch
 
 
 def args_parser():
@@ -39,6 +41,15 @@ def args_parser():
     parser.add_argument(
         "--text-encoder", type=str, default="maskclip", help="text encoder to use", choices=["maskclip", "SAM2OpenCLIP", "SAMOpenCLIP"]
     )
+    parser.add_argument(
+        "--prototype-quantize-path", type=str, required=False, help="Path to the prototype quantize path"
+    )
+    parser.add_argument(
+        "--rendering-mode", type=str, default="RGB+AttentionMap+VIS", help="rendering mode to use", choices=["RGB", "RGB+Feature", "RGB+Feature+Feature_PCA", "RGB+AttentionMap", "RGB+AttentionMap+VIS"]
+    )
+    parser.add_argument(
+        "--metrics", type=str, default="attention_map", help="metrics to use", choices=["attention_map", "segmentation"]
+    )
     return parser.parse_args()
 
 
@@ -60,8 +71,13 @@ def load_evaluator(args):
 
     gaussian_primitive = GaussianPrimitive()
     gaussian_primitive.from_file(args.ckpt, args.feature_ckpt)
+    if args.prototype_quantize_path is not None:
+        prototypes = torch.load(args.prototype_quantize_path)
+        text_encoder = TextEncoder(args.text_encoder, device=torch.device("cuda"), prototypes=prototypes)
+    else:
+        text_encoder = TextEncoder(args.text_encoder, device=torch.device("cuda"))
 
-    evaluator = lerf_evaluator(gaussian_primitive, valset, label_dir)
+    evaluator = lerf_evaluator(gaussian_primitive, valset, label_dir, text_encoder)
 
     return evaluator
 
@@ -72,17 +88,12 @@ def main():
     # Load data
     evaluator = load_evaluator(args)
     evaluator.eval(
-        Path(args.result_dir), modes="RGB+Feature+Feature_PCA", feature_saving_mode="pt"
+        Path(args.result_dir), modes=args.rendering_mode, feature_saving_mode="pt"
     )
-    if args.text_encoder == "SAM2OpenCLIP":
-        enable_pca = 256
-    else:
-        enable_pca = None
-        
     metrics = LERFMetrics(
-        label_folder=Path(args.label_dir), rendered_folder=Path(args.result_dir), text_encoder=args.text_encoder, enable_pca=enable_pca
+        label_folder=Path(args.label_dir), rendered_folder=Path(args.result_dir), text_encoder=args.text_encoder, enable_pca=None
     )
-    metrics.compute_metrics(save_path=Path(args.result_dir))
+    metrics.compute_metrics(save_path=Path(args.result_dir), mode=args.metrics)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,58 @@
 import numpy as np
+from pathlib import Path
+from PIL import Image
+import torch
+import torch.nn.functional as F
 
+
+
+
+
+def load_image_features(image_path: Path, feature_folder: Path) -> torch.Tensor:
+    feature_path = image_path.parent.parent /feature_folder / f'{image_path.stem}.pt'
+    if feature_path.exists():
+        return load_image_features_from_SAM2OpenCLIP(feature_path, image_path)
+    feature_path = image_path.parent.parent / feature_folder / f'{image_path.stem}_f.npy'
+    if feature_path.exists():
+        return load_image_feature_from_SAMOpenCLIP(feature_folder, image_path)
+    raise ValueError(f"Feature path {feature_path} does not exist")
+
+def load_image_features_from_SAM2OpenCLIP(feature_folder: Path, image_path: Path) -> torch.Tensor:
+    feature_path = image_path.parent.parent /feature_folder / f'{image_path.stem}.pt'
+    mask_path = image_path.parent.parent /'masks' / f'{image_path.stem}.png'
+    mask = Image.open(mask_path)
+    mask_array = np.array(mask.convert("L"))
+    masks = torch.tensor(((np.arange(mask_array.max()+1))[:, None, None] == mask_array[None, :, :]), dtype=torch.float32).to('cuda')
+    mask_features = torch.load(feature_path).to('cuda')
+
+    mask_features = torch.einsum("b h w, b c -> h w c", masks, mask_features)
+
+    mask_features /= mask_features.norm(dim=-1, keepdim=True)
+
+    return mask_features
+
+
+def load_image_feature_from_SAMOpenCLIP(feature_folder: Path, image_path: Path) -> torch.Tensor:
+    """
+    Load image features from SAMOpenCLIP, We follow the Same Convention of LAGA, 
+    This procedure takes more time during run time due to the embedding operation.
+    Args:
+        feature_path: Path to the feature file
+        image_path: Path to the image
+    Returns:
+        mask_features: (H, W, C) tensor of image features
+    """
+    feature_path = image_path.parent.parent / feature_folder / f'{image_path.stem}_f.npy'
+    segment_path = image_path.parent.parent / feature_folder / f'{image_path.stem}_s.npy'
+    features = torch.from_numpy(np.load(feature_path)).to('cuda')
+    segment = torch.from_numpy(np.load(segment_path)).to('cuda').to(torch.long)+1
+
+
+    zero_row     = torch.zeros(1, 512, device=features.device, dtype=features.dtype)
+    features_pad = torch.cat([zero_row, features], dim=0) 
+    feat_map = F.embedding(segment, features_pad).sum(dim=0)
+    feat_map = feat_map / (feat_map.norm(dim=-1, keepdim=True) + 1e-6)
+    return feat_map
 
 def similarity_from_cameras(c2w, strict_scaling=False, center_method="focus"):
     """

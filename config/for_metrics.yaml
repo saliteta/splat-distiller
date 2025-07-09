@@ -1,0 +1,42 @@
+# config.yaml
+hydra:
+  run:
+    # keep working dir where you launched the script
+    dir: .
+
+# Path to your LERF OVS root folder
+lerf_ovs: "/media/bxiong/c6deb427-f841-4fb3-8707-2d0593655c63/lerf_ovs"
+
+# Where to write all outputs
+output_path: "/media/bxiong/c6deb427-f841-4fb3-8707-2d0593655c63/models/results_metrics"
+
+# Which steps to skip
+skip:
+    feature_extraction: false
+    training:        false
+    lifting:         false
+    evaluation:      false
+
+
+# Feature extraction settings
+
+feature_extraction:
+    method: "SAMOpenCLIP" # one of [maskclip, SAMOpenCLIP]
+    folder: "SAMOpenCLIP_features"
+    sam_ckpt_path: "/home/bxiong/workspace/LaGa/sam_vit_h_4b8939.pth"
+
+# Training settings
+training:
+    splat_method: "3DGS"         # one of [3DGS, 2DGS, DBS]
+
+
+
+# Distillation settings
+distillation:
+    quantize: True
+
+
+# Evaluation settings
+evaluation:
+    rendering_mode: "RGB+AttentionMap+VIS"
+    metrics: "attention_map"

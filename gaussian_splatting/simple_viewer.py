@@ -2,6 +2,7 @@ import argparse
 import math
 import os
 import time
+import typing
 
 import torch
 import torch.nn.functional as F
@@ -13,18 +14,12 @@ from gsplat.rendering import rasterization
 from nerfview import CameraState, RenderTabState, apply_float_colormap
 from gsplat_viewer import GsplatViewer, GsplatRenderTabState
 from sklearn.decomposition import PCA
-from featup.featurizers.maskclip.clip import tokenize
-
+from text_encoder import TextEncoder
 
 def main(local_rank: int, world_rank, world_size: int, args):
     torch.manual_seed(42)
     device = torch.device("cuda", local_rank)
-    clip_model = (
-        torch.hub.load("mhamilton723/FeatUp", "maskclip", use_norm=False)
-        .to(device)
-        .eval()
-        .model.model
-    )
+    text_encoder = TextEncoder(args.text_encoder, device)
 
     ckpt = torch.load(args.ckpt, map_location=device)["splats"]
     means = ckpt["means"]
@@ -63,9 +58,7 @@ def main(local_rank: int, world_rank, world_size: int, args):
         
     @torch.no_grad()
     def compute_relevance(features, render_tab_state):
-        text_features = clip_model.encode_text(
-            tokenize(render_tab_state.query_text).cuda()
-        ).float()
+        text_features = text_encoder.encode_text(render_tab_state.query_text).cuda().float()
         text_features = F.normalize(text_features, dim=0)
         features = F.normalize(features, dim=0)
 
@@ -217,6 +210,7 @@ if __name__ == "__main__":
         "--with_ut", action="store_true", help="use uncentered transform"
     )
     parser.add_argument("--with_eval3d", action="store_true", help="use eval 3D")
+    parser.add_argument("--text_encoder", type=str, default="maskclip", help="text encoder to use")
     args = parser.parse_args()
     assert args.scene_grid % 2 == 1, "scene_grid must be odd"
 

@@ -24,20 +24,15 @@ from fused_ssim import fused_ssim
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 import pandas as pd
-from tqdm import tqdm
+from tqdm import tqdm, trange
 from PIL import Image
 from gaussian_splatting.text_encoder import TextEncoder
 from sklearn.decomposition import PCA
 import torch.nn.functional as F
 import math
+from cluster_utils import quantized_hdbscan_1d
+from evaluator_loader import BACKGROUND_WORDS
 
-BACKGROUND_WORDS = [
-    "floor",
-    "walls",
-    "ceiling",
-    "background",
-    "red green blue"
-]
 
 
 def pca_reduce(X: torch.Tensor, c_prime: int) -> torch.Tensor:
@@ -65,7 +60,7 @@ def positional_embedding(
     positions: torch.Tensor, 
     x_max: int, 
     y_max: int, 
-    num_freqs: int = 3
+    num_freqs: int = 4
 ) -> torch.Tensor:
     """
     positions: (...,2) tensor of (x, y) pixel coords
@@ -117,12 +112,17 @@ class Metrics(ABC):
 
 
 class LERFMetrics(Metrics):
-    def __init__(self, label_folder: Path, rendered_folder: Path, text_encoder: Literal["maskclip", "SAM2OpenCLIP", "SAMOpenCLIP"], enable_pca: int|None = None):
+    def __init__(self, label_folder: Path, 
+            rendered_folder: Path, 
+            text_encoder: Literal["maskclip", "SAM2OpenCLIP", "SAMOpenCLIP"], 
+            enable_pca: int|None = None,
+            instance_segmentation: bool = True):
         super().__init__(label_folder, rendered_folder)
         self.text_encoder = TextEncoder(text_encoder, torch.device("cuda"))
         self.background_text = BACKGROUND_WORDS
         self.enable_pca = enable_pca
-        self.position_embedding_weight = 0.008
+        self.position_embedding_weight = 0.001
+        self.instance_segmentation = True
 
     def load_labels(self) -> Dict[str, Any]:
         """
@@ -161,7 +161,7 @@ class LERFMetrics(Metrics):
 
         return result
 
-    def compute_metrics(self, save_path: Path) -> Dict[str, Any]:
+    def compute_metrics(self, save_path: Path, mode: Literal["feature_map", "attention_map"]) -> Dict[str, Any]:
         """
         Compute the metrics
         """
@@ -189,6 +189,7 @@ class LERFMetrics(Metrics):
             img_path = None
             for ext in [".png", ".jpg", ".jpeg"]:
                 img_path = self.rendered_folder / "RGB" / f"{basename}{ext}"
+                print(img_path)
                 if img_path.exists():
                     rendered_image = cv2.imread(str(img_path))
                     rendered_image = cv2.cvtColor(rendered_image, cv2.COLOR_BGR2RGB)
@@ -198,13 +199,20 @@ class LERFMetrics(Metrics):
                 raise FileNotFoundError(f"No rendered image found for {str(img_path)}")
 
             # Load feature file
-            feature_path = self.rendered_folder / "Feature" / f"{basename}.pt"
+            if mode == "feature_map":
+                feature_path = self.rendered_folder / "Feature" / f"{basename}.pt"
+            elif mode == "attention_map":
+                feature_path = self.rendered_folder / "AttentionMap" / f"{basename}.pt"
+            else:
+                raise ValueError(f"Invalid mode: {mode}")
+            
             if not feature_path.exists():
                 raise FileNotFoundError(f"No feature file found for {feature_path}")
             rendered_feature = torch.load(str(feature_path)).cuda()
 
             feature_metrics = self.feature_metrics(
-                rendered_feature, gt_masks_tensor, unique_categories
+                rendered_feature, gt_masks_tensor, unique_categories,
+                mode
             )
             image_metrics = self.image_metrics(rendered_image, gt_image)
 
@@ -314,25 +322,24 @@ class LERFMetrics(Metrics):
         rendered_feature: torch.Tensor,
         masks_tensor: torch.Tensor,
         unique_categories: List[str],
+        mode: Literal["feature_map", "attention_map"]
     ) -> Dict[str, Any]:
         """
         Compute the metrics for the feature
         """
-        # 1. Get the text features
-        texts = unique_categories + self.background_text
-        text_features = self.text_encoder.encode_text(texts).float().squeeze()
-        #rendered_feature, text_features = self.pca_reduce(rendered_feature, text_features, self.enable_pca)
 
-        attention_scores = self.compute_attention_with_positional_embedding(rendered_feature, text_features)
-        predicted_labels = torch.argmax(
-            attention_scores, dim=-1
-        )  # Get highest similarity category index
+        if mode == "feature_map":
+            predicted_labels, attention_scores = self.feature_map2labels(rendered_feature, unique_categories)
+            H, W, _ = rendered_feature.shape
+        elif mode == "attention_map":
+            predicted_labels, attention_scores = self.attention_map2labels(rendered_feature, unique_categories)
+            H, W, _= rendered_feature.shape
+        else:
+            raise ValueError(f"Invalid mode: {mode}")
 
-        H, W, _ = rendered_feature.shape
-        segmentation_masks = predicted_labels.view(H, W).cpu().numpy()
+        segmentation_masks = predicted_labels.view(-1, H, W)
 
-        #
-        num_classes = text_features.shape[0]
+        num_classes = len(unique_categories)
         max_coords = []
         for cls in range(num_classes):
             class_attention = attention_scores[:, cls]  # (H*W,)
@@ -360,6 +367,64 @@ class LERFMetrics(Metrics):
 
         return metrics
 
+    def feature_map2labels(self, feature_map: torch.Tensor, texts: List[str]) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Convert the feature map to labels, as well as the attention scores
+        feature_map: (H, W, C)
+        texts: (B, ) List[str]
+        return: (B, H, W) torch.Tensor dense segmentation masks, (B,) torch.Tensor attention scores
+        """
+        texts_query = texts + self.background_text
+        text_features = self.text_encoder.encode_text(texts_query).float().squeeze()
+        attention_scores = self.compute_attention_with_positional_embedding(feature_map, text_features)
+
+        predicted_labels = torch.argmax(attention_scores, dim=-1)  # Get highest similarity category index
+
+        num_classes = int(predicted_labels.max().item()) + 1
+        # one_hot: (H, W, B)
+        one_hot = F.one_hot(predicted_labels, num_classes=num_classes)
+        
+        # reorder to (B, H, W)
+        one_hot = one_hot.permute(2, 0, 1).contiguous()
+
+        return one_hot[:len(texts)], attention_scores
+
+    @torch.no_grad()
+    def attention_map2labels(    
+        self,
+        attn_scores: torch.Tensor,
+        prompts: List[str],
+        threshold: float = 0.90,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Convert an (H, W, B) attention map into a (B, H, W) one-hot mask,
+        then zero-out any pixel whose attention score < threshold.
+    
+        Args:
+          attn_scores: (H, W, B) float tensor of attention scores.
+          prompts:     list of length B
+          threshold:   minimum attention to keep a one-hot “1”; below → 0.
+    
+        Returns:
+          mask:        (B, H, W) LongTensor with 0/1
+          attn_scores: unchanged input, for downstream use
+        """
+        # 1) find the top class per pixel
+        predicted = torch.argmax(attn_scores, dim=-1)  # (H, W)
+    
+        B = len(prompts) + len(BACKGROUND_WORDS)
+        # 2) one-hot encode into (H, W, B), then permute → (B, H, W)
+        one_hot = F.one_hot(predicted, num_classes=B)      # (H, W, B)
+        one_hot = one_hot.permute(2, 0, 1).contiguous()    # (B, H, W)
+    
+        # 3) build a threshold mask: True where attn >= threshold
+        #    need to align dims: (H, W, B) → (B, H, W)
+        thresh_mask = (attn_scores >= threshold).permute(2, 0, 1)  # bool (B, H, W)
+    
+        # 4) combine: only keep one_hot==1 where thresh_mask is True
+        mask = (one_hot.bool() & thresh_mask).long()  # (B, H, W), dtype=torch.int64
+    
+        return mask[:len(prompts)], attn_scores
 
 
     def compute_attention_with_positional_embedding(
@@ -403,9 +468,8 @@ class LERFMetrics(Metrics):
         return attn + self.position_embedding_weight * pos_score     
 
 
-
     def mIoU(
-        self, segmentation_masks: torch.Tensor, masks_tensor: torch.Tensor
+        self, segmentation_masks: torch.Tensor, masks_tensor: torch.Tensor, weighted: bool = False
     ) -> Tuple[List[float], float]:
 
         """
@@ -413,8 +477,12 @@ class LERFMetrics(Metrics):
         and compute a weighted overall mIoU per frame based on the total number of pixels in each ground truth mask.
 
         Args:
-            predicted_dense_masks (np.ndarray): 2D array where each pixel's value represents its predicted class label.
-            gt_bindary_masks (List[np.ndarray]): List of binary masks (each of shape (H, W)) for each ground truth class.
+            predicted_dense_masks (torch.Tensor): (B, H, W) tensor where each pixel's value represents its predicted class label.
+            gt_bindary_masks (torch.Tensor): (B, H, W) tensor where each pixel's value represents its ground truth class label.
+            weighted (bool): Whether to use weighted mIoU. 
+            Some people use the number of pixels in the ground truth mask as the weight,
+            some people use the number of pixels in the predicted mask as the weight.
+            Some don't use weighted mIoU. 
 
         Returns:
             Tuple[List[float], float]: A tuple containing:
@@ -422,23 +490,10 @@ class LERFMetrics(Metrics):
                 - The weighted overall mIoU for the frame.
         """
 
-        target_shape = masks_tensor[0].shape  # (height, width)
+        H,W = masks_tensor[0].shape  # (height, width)
+        B, H1, W1 = segmentation_masks.shape
+        assert H == H1 and W == W1, "The shape of the predicted and ground truth masks must be the same"
 
-        # Check if resizing is needed
-        if segmentation_masks.shape != target_shape:
-            # cv2.resize expects size as (width, height) and uses nearest neighbor to avoid smoothing
-            segmentation_masks = (
-                torch.nn.functional.interpolate(
-                    segmentation_masks.unsqueeze(0)
-                    .unsqueeze(0)
-                    .float(),  # Add batch and channel dims
-                    size=(target_shape[0], target_shape[1]),
-                    mode="nearest",
-                )
-                .squeeze(0)
-                .squeeze(0)
-                .long()
-            )  # Remove extra dims and convert back to long
 
         IoUs = []
         weights = []
@@ -446,31 +501,31 @@ class LERFMetrics(Metrics):
         # Loop through each ground truth mask (each corresponding to a class)
         for i in range(len(masks_tensor)):
             # Create a binary mask for predicted segmentation for class i
-            predicted_mask = segmentation_masks == i
             # Get the corresponding ground truth mask for class i
             gt_mask = masks_tensor[i]
 
             # Compute intersection and union for IoU calculation
-            intersection = np.logical_and(predicted_mask, gt_mask).sum()
-            union = np.logical_or(predicted_mask, gt_mask).sum()
+            gt_mask = gt_mask.cuda()
+            intersection = torch.logical_and(segmentation_masks[i], gt_mask).sum()
+            union = torch.logical_or(segmentation_masks[i], gt_mask).sum()
 
             # Compute IoU and avoid division by zero
             iou = intersection / union if union > 0 else 0
-            IoUs.append(iou)
+            IoUs.append(float(iou))
 
             # Weight for the class: total number of pixels in the ground truth mask
-            weights.append(gt_mask.sum())
+            weights.append(float(gt_mask.sum()))
 
         # Calculate overall mIoU as a weighted average using the ground truth pixel counts as weights
         total_weight = sum(weights)
-        overall_miou = (
-            (sum(iou * w for iou, w in zip(IoUs, weights)) / total_weight)
-            if total_weight > 0
-            else 0
-        )
-
-        # Print overall mIoU for the frame
-        # print(f"Overall mIoU for the frame: {overall_miou:.4f}")
+        if weighted:    
+            overall_miou = (
+                (sum(iou * w for iou, w in zip(IoUs, weights)) / total_weight)
+                if total_weight > 0
+                else 0
+            )
+        else:
+            overall_miou = sum(IoUs) / len(IoUs)
 
         return IoUs, overall_miou
 
@@ -550,10 +605,11 @@ class LERFMetrics(Metrics):
         [Rendered image | GT image]
         [Rendered segmentation | GT segmentation]
         """
-        segmentation_masks = metrics["segmentation_masks"]
-        H, W = segmentation_masks.shape
+        segmentation_masks = metrics["segmentation_masks"] # Notice that the shape is (B, H, W), sparse mask
+        B, H, W = segmentation_masks.shape
         num_classes = len(unique_category_text)
         cmap = plt.cm.get_cmap("tab20", num_classes)
+        print("B, num_classes", B, num_classes)
         colors = np.array([cmap(i) for i in range(num_classes)])  # RGBA
 
         # Prepare images
@@ -571,12 +627,11 @@ class LERFMetrics(Metrics):
         if gt_np.shape[0] == 3:
             gt_np = np.transpose(gt_np, (1, 2, 0))
 
-        # Rendered segmentation mask (color)
-        rendered_seg = np.zeros((H, W, 3), dtype=np.uint8)
-        for i in range(min(num_classes, np.max(segmentation_masks) + 1)):
-            rendered_seg[segmentation_masks == i] = (colors[i][:3] * 255).astype(
-                np.uint8
-            )
+        rendered_seg = _colorize_sparse_masks(
+            segmentation_masks,   # your sparse (B,H,W)
+            colors,               # RGBA colormap array
+            alpha=1
+        )
 
         # GT segmentation mask (color)
         gt_seg = np.zeros((H, W, 3), dtype=np.uint8)
@@ -633,3 +688,35 @@ class LERFMetrics(Metrics):
 
 
 
+def _colorize_sparse_masks(
+    sparse_masks,        # torch sparse_coo_tensor or dense Tensor, shape (B,H,W)
+    colors,              # np.ndarray of shape (num_classes,4) RGBA
+    alpha: float = 0.3
+) -> np.ndarray:
+    """
+    Returns an (H, W, 3) uint8 RGB image where each class b
+    from sparse_masks[b] is overlaid with colors[b] and opacity alpha.
+    Overlaps naturally blend in sequence.
+    """
+    # bring to dense numpy shape (B,H,W)
+    if sparse_masks.is_sparse:
+        mask_np = sparse_masks.to_dense().cpu().numpy()
+    else:
+        mask_np = sparse_masks.cpu().numpy()
+
+    B, H, W = mask_np.shape
+    # start with black background in float
+    canvas = np.zeros((H, W, 3), dtype=np.float32)
+
+    for b in range(B):
+        # boolean mask for class b
+        m = mask_np[b].astype(bool)  # (H,W)
+        if not m.any():  
+            continue
+        color = colors[b, :3]  # RGB in [0,1]
+        # blend: new = old*(1-alpha) + color*alpha
+        canvas[m] = canvas[m] * (1 - alpha) + color * alpha
+
+    # convert to uint8
+    canvas = (canvas * 255).clip(0,255).astype(np.uint8)
+    return canvas
