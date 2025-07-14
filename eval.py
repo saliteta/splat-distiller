@@ -11,7 +11,7 @@ from gaussian_splatting.datasets.colmap import Parser, Dataset
 import os
 from pathlib import Path
 import argparse
-from gaussian_splatting.primitives import GaussianPrimitive
+from gaussian_splatting.primitives import GaussianPrimitive, DrSplatPrimitive
 from evaluator_loader import lerf_evaluator
 from metrics import LERFMetrics
 from gaussian_splatting.text_encoder import TextEncoder
@@ -48,7 +48,10 @@ def args_parser():
         "--rendering-mode", type=str, default="RGB+AttentionMap+VIS", help="rendering mode to use", choices=["RGB", "RGB+Feature", "RGB+Feature+Feature_PCA", "RGB+AttentionMap", "RGB+AttentionMap+VIS"]
     )
     parser.add_argument(
-        "--metrics", type=str, default="attention_map", help="metrics to use", choices=["attention_map", "segmentation"]
+        "--metrics", type=str, default="attention_map", help="metrics to use", choices=["attention_map", "feature_map", "drsplat"]
+    )
+    parser.add_argument(
+        "--faiss-index-path", type=str, default=None, help="path to the faiss index"
     )
     return parser.parse_args()
 
@@ -69,8 +72,15 @@ def load_evaluator(args):
     )
     label_dir = Path(args.label_dir)
 
-    gaussian_primitive = GaussianPrimitive()
-    gaussian_primitive.from_file(args.ckpt, args.feature_ckpt)
+    if args.faiss_index_path is not None:
+        gaussian_primitive = DrSplatPrimitive()
+        gaussian_primitive.from_file(args.ckpt, args.faiss_index_path)
+    else:
+        gaussian_primitive = GaussianPrimitive()
+        gaussian_primitive.from_file(args.ckpt, args.feature_ckpt)
+
+    gaussian_primitive.to(torch.device("cuda"))
+
     if args.prototype_quantize_path is not None:
         prototypes = torch.load(args.prototype_quantize_path)
         text_encoder = TextEncoder(args.text_encoder, device=torch.device("cuda"), prototypes=prototypes)
@@ -86,9 +96,17 @@ def main():
     args = args_parser()
 
     # Load data
+    if args.metrics == "feature_map":
+        modes = "RGB+Feature+Feature_PCA"
+    elif args.metrics == "attention_map":
+        modes = "RGB+AttentionMap+VIS"
+    elif args.metrics == "drsplat":
+        modes = "RGB+AttentionMap+VIS"
+    else:
+        raise ValueError(f"Invalid metrics: {args.metrics}")
     evaluator = load_evaluator(args)
     evaluator.eval(
-        Path(args.result_dir), modes=args.rendering_mode, feature_saving_mode="pt"
+        Path(args.result_dir), modes=modes, feature_saving_mode="pt"
     )
     metrics = LERFMetrics(
         label_folder=Path(args.label_dir), rendered_folder=Path(args.result_dir), text_encoder=args.text_encoder, enable_pca=None

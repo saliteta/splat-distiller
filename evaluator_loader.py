@@ -20,8 +20,8 @@ from sklearn.decomposition import PCA
 import os
 from torch.utils.data import DataLoader, Dataset
 from gaussian_splatting.datasets.colmap import Dataset
-from gaussian_splatting.primitives import Primitive, GaussianPrimitive
-from renderer import Renderer, GaussianRenderer
+from gaussian_splatting.primitives import Primitive, GaussianPrimitive, GaussianPrimitive2D
+from renderer import Renderer, GaussianRenderer, GaussianRenderer2D
 from gaussian_splatting.text_encoder import TextEncoder
 import json
 
@@ -53,7 +53,6 @@ def get_viewmat(optimized_camera_to_world):
     viewmat[:, :3, 3:4] = T_inv
     return viewmat
 
-
 class CameraDataset(Dataset):
     def __init__(self, cameras: List[dict]):
         self.cameras = cameras
@@ -63,7 +62,6 @@ class CameraDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.cameras[idx]
-
 
 class base_evaluator(ABC):
     def __init__(self, primitives: Primitive, dataset: Dataset, gt_paths: Path):
@@ -94,6 +92,7 @@ class base_evaluator(ABC):
 
         return dataloader
 
+    @torch.no_grad()
     @abstractmethod
     def _eval(
         self, modes: Literal["RGB", "RGB+Feature", "RGB+Feature+Feature_PCA", "RGB+AttentionMap"], camera, prompt: List[str] | None = None
@@ -107,6 +106,7 @@ class base_evaluator(ABC):
         [torch.shape(HW3), torch.shape(HWC), torch.shape(HW3)]
         """
 
+    @torch.no_grad()
     def eval(
         self,
         saving_path: Path,
@@ -240,12 +240,13 @@ class base_evaluator(ABC):
         """
         pass
     
-
-
 class lerf_evaluator(base_evaluator):
     def __init__(self, primitives: GaussianPrimitive, dataset: Dataset, gt_paths: Path, text_encoder: TextEncoder):
         super().__init__(primitives, dataset, gt_paths)
-        self.renderer = GaussianRenderer(primitives)
+        if isinstance(primitives, GaussianPrimitive2D):
+            self.renderer = GaussianRenderer2D(primitives)
+        else:
+            self.renderer = GaussianRenderer(primitives)
         self.text_encoder = text_encoder
 
 
@@ -271,6 +272,7 @@ class lerf_evaluator(base_evaluator):
                 cameras.append(camera)
         return CameraDataset(cameras)
 
+    @torch.no_grad()
     def _eval(
         self, modes: Literal["RGB", "RGB+Feature", "RGB+Feature+Feature_PCA", "RGB+AttentionMap"], camera
     ) -> List[torch.Tensor]:

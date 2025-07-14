@@ -6,9 +6,9 @@ import hydra
 
 lerf_ovs_scenes = [
     "ramen",
-    "figurines",
     "teatime",
     "waldo_kitchen",
+    "figurines",
 ]
 
 
@@ -45,12 +45,14 @@ def run_lerf_ovs_evaluation(args: DictConfig):
             if args.training.splat_method == "3DGS":
                 print(f"Running Gaussian Splatting for {scene_name}...")
                 os.system(
-                    f"python -W ignore gaussian_splatting/simple_trainer.py default --data-dir {scene} --result_dir {result_scene} --data-factor 1 --disable_viewer --random-bkgd"
+                    f"python -W ignore gaussian_splatting/simple_trainer.py default --data-dir {scene} --result_dir {result_scene} \
+                        --data-factor 1 --disable_viewer --random-bkgd --max-steps {args.training.max_steps} --save-steps {args.training.save_steps} --eval-steps {args.training.max_steps+10}"
                 )
             elif args.training.splat_method == "2DGS":
                 print(f"Running 2D Gaussian Splatting for {scene_name}...")
                 os.system(
-                    f"python -W ignore gaussian_splatting/simple_trainer_2dgs.py --data-dir {scene} --result_dir {result_scene} --data-factor 1 --disable_viewer --random-bkgd"
+                    f"python -W ignore gaussian_splatting/simple_trainer_2dgs.py --data-dir {scene} --result_dir {result_scene} \
+                        --data-factor 1 --disable_viewer --random-bkgd --test_every 1000 --max-steps {args.training.max_steps} --save-steps {args.training.save_steps}"
                 )
             elif args.training.splat_method == "DBS":
                 print(f"Running Deformable Beta Splatting for {scene_name}...")
@@ -70,12 +72,15 @@ def run_lerf_ovs_evaluation(args: DictConfig):
                 continue
             print(f"Lifting {scene}...")
             if args.training.splat_method == "3DGS":
-                ckpt = output_path / scene_name / args.training.splat_method / "ckpts" / "ckpt_29999_rank0.pt"
+                ckpt = output_path / scene_name / args.training.splat_method / "ckpts" / f"ckpt_{args.training.max_steps-1}_rank0.pt"
                 os.system(
                     f"python -W ignore gaussian_splatting/distill.py --data-dir {scene} --ckpt {ckpt} --feature-folder {args.feature_extraction.folder} --quantize {args.distillation.quantize}"
                 )
             elif args.training.splat_method == "2DGS":
-                raise NotImplementedError("2DGS distillation is not implemented yet")
+                ckpt = output_path / scene_name / args.training.splat_method / "ckpts" / f"ckpt_{args.training.max_steps-1}.pt"
+                os.system(
+                    f"python -W ignore gaussian_splatting/distill.py --data-dir {scene} --ckpt {ckpt} --feature-folder {args.feature_extraction.folder} --quantize {args.distillation.quantize}"
+                )
             elif args.training.splat_method == "DBS":
                 raise NotImplementedError("DBS distillation is not implemented yet")
             else:
@@ -89,22 +94,38 @@ def run_lerf_ovs_evaluation(args: DictConfig):
                     f"Skipping {scene_name} as it is not in the predefined scenes list."
                 )
                 continue
-            result_scene = output_path / scene_name / args.training.splat_method
             label_path = lerf_base_path / "label" / scene_name
-            ckpt = output_path / scene_name / args.training.splat_method / "ckpts" / "ckpt_29999_rank0.pt"
-            if args.distillation.quantize:
-                feature_ckpt = ckpt.parent / (ckpt.stem + "_quantized_features.pt")
-            else:
-                feature_ckpt = None
-            print(f"Evaluating {scene_name}...")
-            os.system(
+            if args.extension == "drsplat":
+                result_scene = output_path  / args.training.splat_method / scene_name
+                ckpt = output_path  / args.training.splat_method / scene_name / 'drsplat_features_1_pq_openclip_topk10_weight_128' / f"chkpnt0.pth"
+                feature_ckpt = ckpt.parent / (ckpt.stem + "_features.pt")
+                os.system(
+                    f"python -W ignore eval.py --data-dir {scene} --result-dir {result_scene} --label-dir {label_path} \
+                        --ckpt {ckpt} --text-encoder {args.feature_extraction.method} --feature-ckpt {feature_ckpt} \
+                        --rendering-mode {args.evaluation.rendering_mode} --metrics {args.evaluation.metrics} --faiss-index-path {args.faiss_index_path}"
+                )
+            elif args.extension == "None":
+                result_scene = output_path / scene_name/ args.training.splat_method 
+                if args.training.splat_method == "2DGS":
+                    ckpt = output_path / scene_name / args.training.splat_method / "ckpts" / f"ckpt_{args.training.max_steps-1}.pt"
+                else:
+                    ckpt = output_path / scene_name / args.training.splat_method / "ckpts" / f"ckpt_{args.training.max_steps-1}_rank0.pt"
+                if args.distillation.quantize:
+                    feature_ckpt = ckpt.parent / (ckpt.stem + "_quantized_features.pt")
+                else:
+                    feature_ckpt = ckpt.parent / (ckpt.stem + "_features.pt")
+                os.system(
                 f"python -W ignore eval.py --data-dir {scene} --result-dir {result_scene} --label-dir {label_path} \
                     --ckpt {ckpt} --text-encoder {args.feature_extraction.method} --feature-ckpt {feature_ckpt} \
                     --rendering-mode {args.evaluation.rendering_mode} --metrics {args.evaluation.metrics}"
             )
+            else:
+                raise ValueError(f"Invalid extension: {args.extension}")
+            print(f"Evaluating {scene_name}...")
 
 
-@hydra.main(config_path="config", config_name="for_metrics.yaml")
+
+@hydra.main(config_path="config", config_name="for_metrics_2d.yaml")
 def main(args: DictConfig):
     run_lerf_ovs_evaluation(args)
 
@@ -113,5 +134,3 @@ if __name__ == "__main__":
     main()
 
 
-
-# python benchmark.py --lerf_ovs ../lerf_ovs --output_path results --text_encoder SAM2OpenCLIP --skip_training --skip_lifting --skip_evaluation

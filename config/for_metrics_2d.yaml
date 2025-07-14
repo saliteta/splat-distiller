@@ -17,7 +17,7 @@ skip:
     feature_extraction: True
     training:        True
     lifting:         True
-    evaluation:      false
+    evaluation:      False
 
 
 # Feature extraction settings
@@ -29,7 +29,7 @@ feature_extraction:
 
 # Training settings
 training:
-    splat_method: "3DGS"         # one of [3DGS, 2DGS, DBS]
+    splat_method: "2DGS"         # one of [3DGS, 2DGS, DBS]
     max_steps: 60000
     save_steps: 60000
 
@@ -37,11 +37,11 @@ training:
 
 # Distillation settings
 distillation:
-    quantize: True
+    quantize: False
 
 
 
 # Evaluation settings
 evaluation:
     rendering_mode: "RGB+AttentionMap+VIS"
-    metrics: "feature_map"
+    metrics: "attention_map"

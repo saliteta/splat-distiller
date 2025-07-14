@@ -24,13 +24,12 @@ from fused_ssim import fused_ssim
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 import pandas as pd
-from tqdm import tqdm, trange
+from tqdm import tqdm
 from PIL import Image
 from gaussian_splatting.text_encoder import TextEncoder
 from sklearn.decomposition import PCA
 import torch.nn.functional as F
 import math
-from cluster_utils import quantized_hdbscan_1d
 from evaluator_loader import BACKGROUND_WORDS
 
 
@@ -189,7 +188,6 @@ class LERFMetrics(Metrics):
             img_path = None
             for ext in [".png", ".jpg", ".jpeg"]:
                 img_path = self.rendered_folder / "RGB" / f"{basename}{ext}"
-                print(img_path)
                 if img_path.exists():
                     rendered_image = cv2.imread(str(img_path))
                     rendered_image = cv2.cvtColor(rendered_image, cv2.COLOR_BGR2RGB)
@@ -201,7 +199,7 @@ class LERFMetrics(Metrics):
             # Load feature file
             if mode == "feature_map":
                 feature_path = self.rendered_folder / "Feature" / f"{basename}.pt"
-            elif mode == "attention_map":
+            elif mode == "attention_map" or mode == "drsplat":
                 feature_path = self.rendered_folder / "AttentionMap" / f"{basename}.pt"
             else:
                 raise ValueError(f"Invalid mode: {mode}")
@@ -322,7 +320,7 @@ class LERFMetrics(Metrics):
         rendered_feature: torch.Tensor,
         masks_tensor: torch.Tensor,
         unique_categories: List[str],
-        mode: Literal["feature_map", "attention_map"]
+        mode: Literal["feature_map", "attention_map", "drsplat"]
     ) -> Dict[str, Any]:
         """
         Compute the metrics for the feature
@@ -333,6 +331,9 @@ class LERFMetrics(Metrics):
             H, W, _ = rendered_feature.shape
         elif mode == "attention_map":
             predicted_labels, attention_scores = self.attention_map2labels(rendered_feature, unique_categories)
+            H, W, _= rendered_feature.shape
+        elif mode == "drsplat":
+            predicted_labels, attention_scores = self.drsplat2labels(rendered_feature, unique_categories)
             H, W, _= rendered_feature.shape
         else:
             raise ValueError(f"Invalid mode: {mode}")
@@ -367,6 +368,30 @@ class LERFMetrics(Metrics):
 
         return metrics
 
+    def drsplat2labels(self, attn_scores: torch.Tensor, prompts: List[str]) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        In their code, it use 4 background words, and compare with threshold 0.5,
+        0.5 means higher than any of the backgournd words, while do not compare with other words.
+    
+        Args:
+          attn_scores: (H, W, B) float tensor of attention scores.
+          prompts:     list of length B
+          threshold:   minimum attention to keep a one-hot “1”; below → 0.
+    
+        Returns:
+          mask:        (B, H, W) LongTensor with 0/1
+          attn_scores: unchanged input, for downstream use
+        """
+        positive_attention_score = attn_scores[..., :len(prompts)]
+        background_attention_score = attn_scores[..., len(prompts):]
+        threshold = background_attention_score.max(dim=-1).values # 0.5 means simple comparison with background words
+
+
+        masks = positive_attention_score > threshold[..., None]
+        masks = masks.permute(2, 0, 1).long()
+
+        return masks, attn_scores
+    
     def feature_map2labels(self, feature_map: torch.Tensor, texts: List[str]) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Convert the feature map to labels, as well as the attention scores
@@ -394,7 +419,7 @@ class LERFMetrics(Metrics):
         self,
         attn_scores: torch.Tensor,
         prompts: List[str],
-        threshold: float = 0.90,
+        threshold: float = 0.85,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Convert an (H, W, B) attention map into a (B, H, W) one-hot mask,
@@ -425,7 +450,40 @@ class LERFMetrics(Metrics):
         mask = (one_hot.bool() & thresh_mask).long()  # (B, H, W), dtype=torch.int64
     
         return mask[:len(prompts)], attn_scores
+    
 
+    @torch.no_grad()
+    def attention_map2threshold(
+        self,
+        attn_scores: torch.Tensor,
+        prompts: List[str],
+        threshold: float = 0.9,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Convert an (H, W, B) attention map into a (B, H, W) multi‐hot mask
+        by directly thresholding each channel.
+
+        Args:
+          attn_scores: (H, W, B) float tensor of attention scores.
+          prompts:     list of length B'  (we’ll ignore any extra background channels)
+          threshold:   cutoff; any score >= threshold becomes 1
+
+        Returns:
+          mask:        (B', H, W) LongTensor with 0/1
+          attn_scores: unchanged input
+        """
+        H, W, B = attn_scores.shape
+        total_B = len(prompts) + len(BACKGROUND_WORDS)
+        assert B == total_B, "Expected exactly B'+|BG| channels"
+
+        # 1) direct per‐channel threshold → bool mask (H, W, B)
+        bool_map = attn_scores >= threshold  # True wherever score >= threshold
+
+        # 2) permute to (B, H, W) and cast to int
+        mask = bool_map.permute(2, 0, 1).long()  # (B, H, W)
+
+        # 3) drop any background channels if you want only the prompt ones
+        return mask[:len(prompts)], attn_scores
 
     def compute_attention_with_positional_embedding(
         self,
@@ -609,7 +667,6 @@ class LERFMetrics(Metrics):
         B, H, W = segmentation_masks.shape
         num_classes = len(unique_category_text)
         cmap = plt.cm.get_cmap("tab20", num_classes)
-        print("B, num_classes", B, num_classes)
         colors = np.array([cmap(i) for i in range(num_classes)])  # RGBA
 
         # Prepare images
