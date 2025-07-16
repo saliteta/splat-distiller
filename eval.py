@@ -11,10 +11,10 @@ from gaussian_splatting.datasets.colmap import Parser, Dataset
 import os
 from pathlib import Path
 import argparse
-from gaussian_splatting.primitives import GaussianPrimitive, DrSplatPrimitive
+from primitives import GaussianPrimitive, DrSplatPrimitive, GaussianPrimitive2D, BetaSplatPrimitive
 from evaluator_loader import lerf_evaluator
 from metrics import LERFMetrics
-from gaussian_splatting.text_encoder import TextEncoder
+from text_encoder import TextEncoder
 import torch
 
 
@@ -53,6 +53,9 @@ def args_parser():
     parser.add_argument(
         "--faiss-index-path", type=str, default=None, help="path to the faiss index"
     )
+    parser.add_argument(
+        "--splat-method", type=str, default="3DGS", help="splat method to use", choices=["3DGS", "2DGS", "DBS", "drsplat"]
+    )
     return parser.parse_args()
 
 
@@ -73,10 +76,19 @@ def load_evaluator(args):
     label_dir = Path(args.label_dir)
 
     if args.faiss_index_path is not None:
-        gaussian_primitive = DrSplatPrimitive()
-        gaussian_primitive.from_file(args.ckpt, args.faiss_index_path)
-    else:
+        if args.splat_method == "drsplat":
+            gaussian_primitive = DrSplatPrimitive()
+            gaussian_primitive.from_file(args.ckpt, args.faiss_index_path)
+        else:
+            raise ValueError(f"Invalid splat method: {args.splat_method}")
+    elif args.splat_method == "3DGS":
         gaussian_primitive = GaussianPrimitive()
+        gaussian_primitive.from_file(args.ckpt, args.feature_ckpt)
+    elif args.splat_method == "2DGS":
+        gaussian_primitive = GaussianPrimitive2D()
+        gaussian_primitive.from_file(args.ckpt, args.feature_ckpt)
+    elif args.splat_method == "DBS":
+        gaussian_primitive = BetaSplatPrimitive()
         gaussian_primitive.from_file(args.ckpt, args.feature_ckpt)
 
     gaussian_primitive.to(torch.device("cuda"))

@@ -26,7 +26,7 @@ from matplotlib.patches import Rectangle
 import pandas as pd
 from tqdm import tqdm
 from PIL import Image
-from gaussian_splatting.text_encoder import TextEncoder
+from text_encoder import TextEncoder
 from sklearn.decomposition import PCA
 import torch.nn.functional as F
 import math

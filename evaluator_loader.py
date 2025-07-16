@@ -20,9 +20,9 @@ from sklearn.decomposition import PCA
 import os
 from torch.utils.data import DataLoader, Dataset
 from gaussian_splatting.datasets.colmap import Dataset
-from gaussian_splatting.primitives import Primitive, GaussianPrimitive, GaussianPrimitive2D
-from renderer import Renderer, GaussianRenderer, GaussianRenderer2D
-from gaussian_splatting.text_encoder import TextEncoder
+from primitives import Primitive, GaussianPrimitive, GaussianPrimitive2D, BetaSplatPrimitive
+from renderer import Renderer, GaussianRenderer, GaussianRenderer2D, BetaSplatRenderer
+from text_encoder import TextEncoder
 import json
 
 
@@ -245,6 +245,8 @@ class lerf_evaluator(base_evaluator):
         super().__init__(primitives, dataset, gt_paths)
         if isinstance(primitives, GaussianPrimitive2D):
             self.renderer = GaussianRenderer2D(primitives)
+        elif isinstance(primitives, BetaSplatPrimitive):
+            self.renderer = BetaSplatRenderer(primitives)
         else:
             self.renderer = GaussianRenderer(primitives)
         self.text_encoder = text_encoder

@@ -5,10 +5,10 @@ from omegaconf import OmegaConf, DictConfig
 import hydra
 
 lerf_ovs_scenes = [
+    "figurines",
     "ramen",
     "teatime",
     "waldo_kitchen",
-    "figurines",
 ]
 
 
@@ -57,7 +57,7 @@ def run_lerf_ovs_evaluation(args: DictConfig):
             elif args.training.splat_method == "DBS":
                 print(f"Running Deformable Beta Splatting for {scene_name}...")
                 os.system(
-                    f"python -W ignore beta_splatting/train.py -s {scene} -m {result_scene} --random-background"
+                    f"python -W ignore beta_splatting/train.py -s {scene} -m {result_scene} --iterations {args.training.max_steps}"
                 )
             else:
                 raise ValueError(f"Invalid training method: {args.training.splat_method}")
@@ -74,15 +74,21 @@ def run_lerf_ovs_evaluation(args: DictConfig):
             if args.training.splat_method == "3DGS":
                 ckpt = output_path / scene_name / args.training.splat_method / "ckpts" / f"ckpt_{args.training.max_steps-1}_rank0.pt"
                 os.system(
-                    f"python -W ignore gaussian_splatting/distill.py --data-dir {scene} --ckpt {ckpt} --feature-folder {args.feature_extraction.folder} --quantize {args.distillation.quantize}"
+                    f"python -W ignore distill.py --data-dir {scene} --ckpt {ckpt} --feature-folder {args.feature_extraction.folder} \
+                        --quantize {args.distillation.quantize} --splat-method {args.training.splat_method}"
                 )
             elif args.training.splat_method == "2DGS":
                 ckpt = output_path / scene_name / args.training.splat_method / "ckpts" / f"ckpt_{args.training.max_steps-1}.pt"
                 os.system(
-                    f"python -W ignore gaussian_splatting/distill.py --data-dir {scene} --ckpt {ckpt} --feature-folder {args.feature_extraction.folder} --quantize {args.distillation.quantize}"
+                    f"python -W ignore distill.py --data-dir {scene} --ckpt {ckpt} --feature-folder {args.feature_extraction.folder} \
+                        --quantize {args.distillation.quantize} --splat-method {args.training.splat_method}"
                 )
             elif args.training.splat_method == "DBS":
-                raise NotImplementedError("DBS distillation is not implemented yet")
+                ckpt = output_path / scene_name / args.training.splat_method / "point_cloud" / f"iteration_{args.training.max_steps}/point_cloud.ply"
+                os.system(
+                    f"python -W ignore distill.py --data-dir {scene} --ckpt {ckpt} --feature-folder {args.feature_extraction.folder} \
+                        --quantize {args.distillation.quantize} --splat-method {args.training.splat_method} --filter {args.distillation.filter}"
+                )
             else:
                 raise ValueError(f"Invalid training method: {args.training.splat_method}")
 
@@ -108,6 +114,11 @@ def run_lerf_ovs_evaluation(args: DictConfig):
                 result_scene = output_path / scene_name/ args.training.splat_method 
                 if args.training.splat_method == "2DGS":
                     ckpt = output_path / scene_name / args.training.splat_method / "ckpts" / f"ckpt_{args.training.max_steps-1}.pt"
+                elif args.training.splat_method == "DBS":
+                    if args.distillation.filter:
+                        ckpt = output_path / scene_name / args.training.splat_method / "point_cloud" / f"iteration_{args.training.max_steps}/point_cloud_filtered.pt"
+                    else:
+                        ckpt = output_path / scene_name / args.training.splat_method / "point_cloud" / f"iteration_{args.training.max_steps}/point_cloud.ply"
                 else:
                     ckpt = output_path / scene_name / args.training.splat_method / "ckpts" / f"ckpt_{args.training.max_steps-1}_rank0.pt"
                 if args.distillation.quantize:
@@ -117,7 +128,7 @@ def run_lerf_ovs_evaluation(args: DictConfig):
                 os.system(
                 f"python -W ignore eval.py --data-dir {scene} --result-dir {result_scene} --label-dir {label_path} \
                     --ckpt {ckpt} --text-encoder {args.feature_extraction.method} --feature-ckpt {feature_ckpt} \
-                    --rendering-mode {args.evaluation.rendering_mode} --metrics {args.evaluation.metrics}"
+                    --rendering-mode {args.evaluation.rendering_mode} --metrics {args.evaluation.metrics} --splat-method {args.training.splat_method}"
             )
             else:
                 raise ValueError(f"Invalid extension: {args.extension}")
@@ -125,7 +136,7 @@ def run_lerf_ovs_evaluation(args: DictConfig):
 
 
 
-@hydra.main(config_path="config", config_name="for_metrics_2d.yaml")
+@hydra.main(config_path="config", config_name="for_metrics.yaml")
 def main(args: DictConfig):
     run_lerf_ovs_evaluation(args)
 

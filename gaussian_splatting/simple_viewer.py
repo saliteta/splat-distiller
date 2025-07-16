@@ -15,31 +15,42 @@ from nerfview import CameraState, RenderTabState, apply_float_colormap
 from gsplat_viewer import GsplatViewer, GsplatRenderTabState
 from sklearn.decomposition import PCA
 from text_encoder import TextEncoder
+from primitives import DrSplatPrimitive, GaussianPrimitive
 
 def main(local_rank: int, world_rank, world_size: int, args):
     torch.manual_seed(42)
     device = torch.device("cuda", local_rank)
     text_encoder = TextEncoder(args.text_encoder, device)
 
-    ckpt = torch.load(args.ckpt, map_location=device)["splats"]
-    means = ckpt["means"]
-    quats = F.normalize(ckpt["quats"], p=2, dim=-1)
-    scales = torch.exp(ckpt["scales"])
-    opacities = torch.sigmoid(ckpt["opacities"])
-    sh0 = ckpt["sh0"]
-    shN = ckpt["shN"]
-    colors = torch.cat([sh0, shN], dim=-2)
-    sh_degree = int(math.sqrt(colors.shape[-2]) - 1)
+    try:
+        primitive = GaussianPrimitive()
+        primitive.from_file(args.ckpt)
+        features = None
+        features_pca = None
+    except:
+        primitive = DrSplatPrimitive()
+        primitive.from_file(args.ckpt, args.faiss_index_path)
+        features = primitive.feature
+        features_pca = None
+
+
+    means = primitive.geometry["means"].to(device)
+    quats = primitive.geometry["quats"].to(device)
+    scales = primitive.geometry["scales"].to(device)
+    opacities = primitive.geometry["opacities"].to(device)
+    colors = primitive.color["colors"].to(device)
+    sh_degree = primitive.geometry["sh_degree"]
+
     print("Number of Gaussians:", len(means))
 
-    features = None
-    features_pca = None
+
 
     if args.feature_ckpt is None:
         args.feature_ckpt = os.path.splitext(args.ckpt)[0] + "_features.pt"
     if os.path.exists(args.feature_ckpt):
         features = torch.load(args.feature_ckpt, map_location=device)
         print("Using features from", args.feature_ckpt)
+    if features is not None:
         features_np = features.cpu().numpy()
         features_np = features_np.reshape(features_np.shape[0], -1)
         # Perform PCA to reduce the feature dimensions to 3
@@ -55,6 +66,8 @@ def main(local_rank: int, world_rank, world_size: int, args):
         
         # 3) normalize into [0,1]
         features_pca = (features_pca - mins) / (ranges + eps)
+        features = features.to(device)
+
         
     @torch.no_grad()
     def compute_relevance(features, render_tab_state):
@@ -209,6 +222,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--with_ut", action="store_true", help="use uncentered transform"
     )
+    parser.add_argument("--faiss_index_path", type=str, default=None, help="path to the faiss index")
     parser.add_argument("--with_eval3d", action="store_true", help="use eval 3D")
     parser.add_argument("--text_encoder", type=str, default="maskclip", help="text encoder to use")
     args = parser.parse_args()

@@ -141,6 +141,7 @@ setup(
             "cuda/include/*.cuh",
             "cuda/csrc/third_party/**/*",
             "*.py",  # Ensure all files in view_embedding are included
+            "datasets/**/*"
         ]
     },
     include_package_data=True,
