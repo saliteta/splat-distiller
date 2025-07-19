@@ -5,7 +5,13 @@ import torchvision.transforms as T
 from PIL import Image
 from tqdm import tqdm
 from pathlib import Path
-from pre_processing import OpenCLIPNetwork, OpenCLIPNetworkConfig, sam_model_registry, SamAutomaticMaskGenerator, create
+from pre_processing import (
+    OpenCLIPNetwork,
+    OpenCLIPNetworkConfig,
+    sam_model_registry,
+    SamAutomaticMaskGenerator,
+    create,
+)
 import cv2
 
 """
@@ -15,7 +21,15 @@ import cv2
     - SAM2OpenCLIP: "SAM2OpenCLIP", this can be modified according to the open clip model you want to use.
 """
 # Supported models
-SUPPORTED_MODELS = ["dino16", "dinov2", "clip", "maskclip", "vit", "resnet50", "SAMOpenCLIP"]
+SUPPORTED_MODELS = [
+    "dino16",
+    "dinov2",
+    "clip",
+    "maskclip",
+    "vit",
+    "resnet50",
+    "SAMOpenCLIP",
+]
 
 
 def parse_arguments():
@@ -52,7 +66,13 @@ def parse_arguments():
         help="Relative Path to the feature output folder.",
     )
     parser.add_argument("--device", type=str, default="cuda", help="pytorch device")
-    parser.add_argument("--sam_ckpt_path", type=str, default="sam_vit_h_4b8939.pth", help="path to the sam checkpoint", required=False)
+    parser.add_argument(
+        "--sam_ckpt_path",
+        type=str,
+        default="sam_vit_h_4b8939.pth",
+        help="path to the sam checkpoint",
+        required=False,
+    )
     return parser.parse_args()
 
 
@@ -76,7 +96,7 @@ def load_upsampler(model_name, device):
     return upsampler
 
 
-def main_featup(data_dir:str, features_output_dir:str, model_name:str, device:str):
+def main_featup(data_dir: str, features_output_dir: str, model_name: str, device: str):
 
     # Define transformations
     transform = T.Compose(
@@ -132,9 +152,9 @@ def main_featup(data_dir:str, features_output_dir:str, model_name:str, device:st
     print("Features extracted successfully")
 
 
-def main_SAMOpenCLIP(data_dir:str, features_output_dir:str, sam_ckpt_path:str):
+def main_SAMOpenCLIP(data_dir: str, features_output_dir: str, sam_ckpt_path: str):
     model = OpenCLIPNetwork(OpenCLIPNetworkConfig)
-    sam = sam_model_registry["vit_h"](checkpoint=sam_ckpt_path).to('cuda')
+    sam = sam_model_registry["vit_h"](checkpoint=sam_ckpt_path).to("cuda")
     mask_generator = SamAutomaticMaskGenerator(
         model=sam,
         points_per_side=32,
@@ -159,25 +179,33 @@ def main_SAMOpenCLIP(data_dir:str, features_output_dir:str, sam_ckpt_path:str):
         orig_w, orig_h = image.shape[1], image.shape[0]
         if orig_h > 1080:
             if not WARNED:
-                print("[ INFO ] Encountered quite large input images (>1080P), rescaling to 1080P.\n "
-                    "If this is not desired, please explicitly specify '--resolution/-r' as 1")
+                print(
+                    "[ INFO ] Encountered quite large input images (>1080P), rescaling to 1080P.\n "
+                    "If this is not desired, please explicitly specify '--resolution/-r' as 1"
+                )
                 WARNED = True
             global_down = orig_h / 1080
         else:
             global_down = 1
-            
+
         scale = float(global_down)
-        resolution = (int( orig_w  / scale), int(orig_h / scale))
+        resolution = (int(orig_w / scale), int(orig_h / scale))
 
         image = cv2.resize(image, resolution)
         image = torch.from_numpy(image)
         img_list.append(image)
     images = [img_list[i].permute(2, 0, 1)[None, ...] for i in range(len(img_list))]
-    imgs = torch.cat(images)    
-
+    imgs = torch.cat(images)
 
     os.makedirs(features_output_dir, exist_ok=True)
-    create(imgs, data_list, features_output_dir, norm_clip_features=True, mask_generator=mask_generator, model=model)
+    create(
+        imgs,
+        data_list,
+        features_output_dir,
+        norm_clip_features=True,
+        mask_generator=mask_generator,
+        model=model,
+    )
 
 
 if __name__ == "__main__":

@@ -27,7 +27,6 @@ from bsplat.rendering import isect_tiles as bsplat_isect_tiles
 from bsplat.rendering import isect_offset_encode as bsplat_isect_offset_encode
 
 
-
 ###### 3DGS ######
 def inverse_rasterization_3dgs(
     means: Tensor,  # [N, 3]
@@ -600,7 +599,6 @@ def inverse_rasterization_2dgs(
     return feature_gaussian, feature_weight, gaussian_ids
 
 
-
 ###### DBS ######
 def inverse_rasterization_dbs(
     means: Tensor,  # [N, 3]
@@ -777,8 +775,6 @@ def inverse_rasterization_dbs(
     assert Ks.shape == (C, 3, 3), Ks.shape
     # we only do feature rendering
 
-
-
     # Project Gaussians to 2D. Directly pass in {quats, scales} is faster than precomputing covars.
     proj_results = bsplat_fully_fused_projection(
         means,
@@ -868,7 +864,9 @@ def inverse_rasterization_dbs(
         n_chunks = (rendered_colors.shape[-1] + channel_chunk - 1) // channel_chunk
         gaussian_features, gaussian_weights = [], []
         for i in range(n_chunks):
-            colors_chunk = rendered_colors[..., i * channel_chunk : (i + 1) * channel_chunk]
+            colors_chunk = rendered_colors[
+                ..., i * channel_chunk : (i + 1) * channel_chunk
+            ]
             gaussian_features_, gaussian_weights_ = rasterize_reverse_fwd_dbs(
                 means2d,
                 conics,

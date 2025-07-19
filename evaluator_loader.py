@@ -19,21 +19,19 @@ from tqdm import tqdm
 from sklearn.decomposition import PCA
 import os
 from torch.utils.data import DataLoader, Dataset
-from gaussian_splatting.datasets.colmap import Dataset
-from primitives import Primitive, GaussianPrimitive, GaussianPrimitive2D, BetaSplatPrimitive
-from renderer import Renderer, GaussianRenderer, GaussianRenderer2D, BetaSplatRenderer
-from text_encoder import TextEncoder
+from gsplat_ext import Dataset
+from gsplat_ext import (
+    Primitive,
+    GaussianPrimitive,
+    GaussianPrimitive2D,
+    BetaSplatPrimitive,
+)
+from gsplat_ext import Renderer, GaussianRenderer, GaussianRenderer2D, BetaSplatRenderer
+from gsplat_ext import TextEncoder
 import json
 
 
-
-BACKGROUND_WORDS = [
-    "floor",
-    "walls",
-    "ceiling",
-    "background",
-    "table"
-]
+BACKGROUND_WORDS = ["floor", "wall", "ceiling", "background", "object", "things", "stuff", "texture" ]
 
 
 def get_viewmat(optimized_camera_to_world):
@@ -53,6 +51,7 @@ def get_viewmat(optimized_camera_to_world):
     viewmat[:, :3, 3:4] = T_inv
     return viewmat
 
+
 class CameraDataset(Dataset):
     def __init__(self, cameras: List[dict]):
         self.cameras = cameras
@@ -62,6 +61,7 @@ class CameraDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.cameras[idx]
+
 
 class base_evaluator(ABC):
     def __init__(self, primitives: Primitive, dataset: Dataset, gt_paths: Path):
@@ -95,7 +95,12 @@ class base_evaluator(ABC):
     @torch.no_grad()
     @abstractmethod
     def _eval(
-        self, modes: Literal["RGB", "RGB+Feature", "RGB+Feature+Feature_PCA", "RGB+AttentionMap"], camera, prompt: List[str] | None = None
+        self,
+        modes: Literal[
+            "RGB", "RGB+Feature", "RGB+Feature+Feature_PCA", "RGB+AttentionMap"
+        ],
+        camera,
+        prompt: List[str] | None = None,
     ) -> List[torch.Tensor]:
         """
         Return a List of Tensors in cpu already detached
@@ -110,7 +115,13 @@ class base_evaluator(ABC):
     def eval(
         self,
         saving_path: Path,
-        modes: Literal["RGB", "RGB+Feature", "RGB+Feature+Feature_PCA", "RGB+AttentionMap", "RGB+AttentionMap+VIS"],
+        modes: Literal[
+            "RGB",
+            "RGB+Feature",
+            "RGB+Feature+Feature_PCA",
+            "RGB+AttentionMap",
+            "RGB+AttentionMap+VIS",
+        ],
         feature_saving_mode: Literal["pt", "ftz"] = "pt",
     ) -> None:
         """
@@ -126,7 +137,11 @@ class base_evaluator(ABC):
             RGB_path.mkdir(exist_ok=True)
 
         if modes == "RGB":
-            for camera in tqdm(self.camera_dataloader, desc="RGB Rendering", total=len(self.camera_dataloader)):
+            for camera in tqdm(
+                self.camera_dataloader,
+                desc="RGB Rendering",
+                total=len(self.camera_dataloader),
+            ):
                 results: List[torch.Tensor] = self._eval(modes=modes, camera=camera)
                 img = results[0]
                 img = img.numpy()
@@ -138,7 +153,11 @@ class base_evaluator(ABC):
 
         elif modes == "RGB+Feature":
 
-            for camera in tqdm(self.camera_dataloader, desc="RGB+Feature Rendering", total=len(self.camera_dataloader)):
+            for camera in tqdm(
+                self.camera_dataloader,
+                desc="RGB+Feature Rendering",
+                total=len(self.camera_dataloader),
+            ):
                 results: List[torch.Tensor] = self._eval(modes=modes, camera=camera)
                 img = results[0]
                 feature = results[1]
@@ -165,7 +184,9 @@ class base_evaluator(ABC):
         elif modes == "RGB+Feature+Feature_PCA":
 
             for camera in tqdm(
-                self.camera_dataloader, desc="RGB+Feature+Feature_PCA Rendering", total=len(self.camera_dataloader)
+                self.camera_dataloader,
+                desc="RGB+Feature+Feature_PCA Rendering",
+                total=len(self.camera_dataloader),
             ):
                 results: List[torch.Tensor] = self._eval(modes=modes, camera=camera)
                 img = results[0]
@@ -196,9 +217,13 @@ class base_evaluator(ABC):
                 feature_pca = (feature_pca * 255).astype(np.uint8)
                 feature_pca = cv2.cvtColor(feature_pca, cv2.COLOR_RGB2BGR)
                 cv2.imwrite(saving_path / "Feature_PCA" / img_name, feature_pca)
-        
+
         elif modes == "RGB+AttentionMap":
-            for camera in tqdm(self.camera_dataloader, desc="RGB+AttentionMap Rendering", total=len(self.camera_dataloader)):
+            for camera in tqdm(
+                self.camera_dataloader,
+                desc="RGB+AttentionMap Rendering",
+                total=len(self.camera_dataloader),
+            ):
                 results: List[torch.Tensor] = self._eval(modes=modes, camera=camera)
                 img = results[0]
                 attention_map = results[1]
@@ -208,9 +233,16 @@ class base_evaluator(ABC):
                 img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
                 img_name = camera["image_name"][0]
                 cv2.imwrite(saving_path / "RGB" / img_name, img)
-                torch.save(attention_map, saving_path / "AttentionMap" / (img_name.split(".")[0] + ".pt"))
+                torch.save(
+                    attention_map,
+                    saving_path / "AttentionMap" / (img_name.split(".")[0] + ".pt"),
+                )
         elif modes == "RGB+AttentionMap+VIS":
-            for camera in tqdm(self.camera_dataloader, desc="RGB+AttentionMap+VIS Rendering", total=len(self.camera_dataloader)):
+            for camera in tqdm(
+                self.camera_dataloader,
+                desc="RGB+AttentionMap+VIS Rendering",
+                total=len(self.camera_dataloader),
+            ):
                 results: List[torch.Tensor] = self._eval(modes=modes, camera=camera)
                 img = results[0]
                 attention_map = results[1]
@@ -220,9 +252,14 @@ class base_evaluator(ABC):
                 img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
                 img_name = camera["image_name"][0]
                 cv2.imwrite(saving_path / "RGB" / img_name, img)
-                torch.save(attention_map, saving_path / "AttentionMap" / (img_name.split(".")[0] + ".pt"))
+                torch.save(
+                    attention_map,
+                    saving_path / "AttentionMap" / (img_name.split(".")[0] + ".pt"),
+                )
                 os.makedirs(saving_path / "AttentionMap" / img_name, exist_ok=True)
-                self.visualize_attention_map(attention_map, camera, saving_path / "AttentionMap" / img_name)
+                self.visualize_attention_map(
+                    attention_map, camera, saving_path / "AttentionMap" / img_name
+                )
 
         else:
             print(
@@ -233,15 +270,23 @@ class base_evaluator(ABC):
 
         print(f"=== evaluation succssful :), saved at:  {saving_path} ===")
 
-
-    def visualize_attention_map(self, attention_map: torch.Tensor, img: torch.Tensor, saving_path: Path) -> None:
+    def visualize_attention_map(
+        self, attention_map: torch.Tensor, img: torch.Tensor, saving_path: Path
+    ) -> None:
         """
         Visualize the attention map
         """
         pass
-    
+
+
 class lerf_evaluator(base_evaluator):
-    def __init__(self, primitives: GaussianPrimitive, dataset: Dataset, gt_paths: Path, text_encoder: TextEncoder):
+    def __init__(
+        self,
+        primitives: GaussianPrimitive,
+        dataset: Dataset,
+        gt_paths: Path,
+        text_encoder: TextEncoder,
+    ):
         super().__init__(primitives, dataset, gt_paths)
         if isinstance(primitives, GaussianPrimitive2D):
             self.renderer = GaussianRenderer2D(primitives)
@@ -250,7 +295,6 @@ class lerf_evaluator(base_evaluator):
         else:
             self.renderer = GaussianRenderer(primitives)
         self.text_encoder = text_encoder
-
 
     def _load_camera(self) -> Dataset:
         """
@@ -268,7 +312,9 @@ class lerf_evaluator(base_evaluator):
         for camera in self.dataset:
             camera_basename = Path(camera["image_name"]).stem
             if camera_basename in json_basenames:
-                objects = json.load(open(self.gt_paths / f"{camera_basename}.json", "r"))['objects']
+                objects = json.load(
+                    open(self.gt_paths / f"{camera_basename}.json", "r")
+                )["objects"]
                 objects = [obj["category"] for obj in objects]
                 camera["prompts"] = list(dict.fromkeys(objects))
                 cameras.append(camera)
@@ -276,7 +322,11 @@ class lerf_evaluator(base_evaluator):
 
     @torch.no_grad()
     def _eval(
-        self, modes: Literal["RGB", "RGB+Feature", "RGB+Feature+Feature_PCA", "RGB+AttentionMap"], camera
+        self,
+        modes: Literal[
+            "RGB", "RGB+Feature", "RGB+Feature+Feature_PCA", "RGB+AttentionMap"
+        ],
+        camera,
     ) -> List[torch.Tensor]:
         device = "cuda"
         camtoworlds = camera["camtoworld"].to(device)
@@ -307,34 +357,50 @@ class lerf_evaluator(base_evaluator):
         if "AttentionMap" in mode_list:
             prompts = [s for (s,) in camera["prompts"]] + BACKGROUND_WORDS
             text_features = self.text_encoder.encode_text(prompts)
-            text_features = F.normalize(text_features, dim=0)
-            attention_map = self.renderer.render(Ks, camtoworlds, width, height, "AttentionMap", text_features)
+            text_features = F.normalize(text_features, dim=1)
+            attention_map = self.renderer.render(
+                Ks, camtoworlds, width, height, "AttentionMap", text_features
+            )
             results.append(attention_map)
         return results
-    
-    def visualize_attention_map(self, attention_map: torch.Tensor, camera: dict, saving_path: Path) -> None:
+
+    def visualize_attention_map(
+        self, attention_map: torch.Tensor, camera: dict, saving_path: Path
+    ) -> None:
         """
         Visualize the attention map
         """
+        import matplotlib.pyplot as plt
         prompts = [s for (s,) in camera["prompts"]]
 
         H, W, B = attention_map.shape
         device = attention_map.device
 
         # 1) compute per‐map mean & max in a fully vectorized way
-        flat = attention_map.view(-1, B)                          # (H*W, B)
-        means = flat.mean(dim=0).view(1, 1, B)           # (1,1,B)
-        maxs  = flat.max(dim=0).values.view(1, 1, B)     # (1,1,B)
-        denom = (maxs - means).clamp(min=1e-8)            # (1,1,B)
+        flat = attention_map.view(-1, B)  # (H*W, B)
+        means = flat.mean(dim=0).view(1, 1, B)  # (1,1,B)
+        maxs = flat.max(dim=0).values.view(1, 1, B)  # (1,1,B)
+        denom = (maxs - means).clamp(min=1e-8)  # (1,1,B)
 
         # 2) rescale from mean→max, clamp to [0,1]
         rescaled = ((attention_map - means) / denom).clamp(0.0, 1.0)
         rescaled = rescaled.permute(2, 0, 1)
 
         # 3) to CPU uint8
-        heat_uint8 = (rescaled * 255.0).to(torch.uint8).cpu().numpy() 
+        heat_uint8 = (rescaled * 255.0).to(torch.uint8).cpu().numpy()
 
         for i in range(len(prompts)):
             heatmap = heat_uint8[i]
             heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_VIRIDIS)
             cv2.imwrite(str(saving_path / f"{prompts[i]}.png"), heatmap)
+
+            # Save histogram of the original (not color-mapped) attention map for this prompt
+            attn_map_flat = attention_map[:, i].cpu().numpy().flatten()
+            plt.figure()
+            plt.hist(attn_map_flat, bins=50, color='blue', alpha=0.7)
+            plt.title(f"Attention Map Histogram: {prompts[i]}")
+            plt.xlabel("Rescaled Attention Value")
+            plt.ylabel("Pixel Count")
+            plt.tight_layout()
+            plt.savefig(str(saving_path / f"{prompts[i]}_his.png"))
+            plt.close()

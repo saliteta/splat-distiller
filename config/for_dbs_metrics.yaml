@@ -16,20 +16,18 @@ extension: "None"
 skip:
     feature_extraction: True
     training:        True
-    lifting:         True
+    lifting:         False
     evaluation:      False
 
-
-# Feature extraction settings
 
 feature_extraction:
     method: "SAMOpenCLIP" # one of [maskclip, SAMOpenCLIP]
     folder: "SAMOpenCLIP_features"
-    sam_ckpt_path: "/home/bxiong/workspace/LaGa/sam_vit_h_4b8939.pth"
+
 
 # Training settings
 training:
-    splat_method: "3DGS"         # one of [3DGS, 2DGS, DBS]
+    splat_method: "DBS"         # one of [3DGS, 2DGS, DBS]
     max_steps: 60000
     save_steps: 60000
 
@@ -38,11 +36,10 @@ training:
 # Distillation settings
 distillation:
     quantize: False
-    
-
+    filter: True
 
 
 # Evaluation settings
 evaluation:
-    rendering_mode: "RGB+AttentionMap+VIS" # RGB+FeatureMap+pcaFeatureMap
-    metrics: "attention_map" # attention_map
+    rendering_mode: "RGB+AttentionMap+VIS"
+    metrics: "attention_map"

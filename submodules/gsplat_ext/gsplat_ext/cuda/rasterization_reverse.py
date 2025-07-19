@@ -3,6 +3,7 @@ from torch import Tensor
 from ._backend import _C
 import torch
 
+
 def rasterize_reverse_fwd_2dgs(
     means2d: Tensor,
     ray_transforms: Tensor,
@@ -225,7 +226,9 @@ def rasterize_reverse_fwd_dbs(
         rendered_colors = torch.cat(
             [
                 rendered_colors,
-                torch.zeros(*rendered_colors.shape[:-1], padded_channels, device=device),
+                torch.zeros(
+                    *rendered_colors.shape[:-1], padded_channels, device=device
+                ),
             ],
             dim=-1,
         )

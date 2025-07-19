@@ -22,17 +22,16 @@ import cv2
 import numpy as np
 from fused_ssim import fused_ssim
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
 import pandas as pd
 from tqdm import tqdm
 from PIL import Image
-from text_encoder import TextEncoder
+from gsplat_ext import TextEncoder
 from sklearn.decomposition import PCA
 import torch.nn.functional as F
 import math
 from evaluator_loader import BACKGROUND_WORDS
-
-
+from scipy import ndimage
+import numpy as np
 
 def pca_reduce(X: torch.Tensor, c_prime: int) -> torch.Tensor:
     """
@@ -47,19 +46,17 @@ def pca_reduce(X: torch.Tensor, c_prime: int) -> torch.Tensor:
     """
     # 1) Move to CPU and convert to NumPy
     X_np = X.detach().cpu().numpy()
-    
+
     # 2) Fit PCA and transform
     pca = PCA(n_components=c_prime)
     X_reduced_np = pca.fit_transform(X_np)
-    
+
     # 3) Convert back to torch.Tensor (on CPU)
     return torch.from_numpy(X_reduced_np).cuda()
 
+
 def positional_embedding(
-    positions: torch.Tensor, 
-    x_max: int, 
-    y_max: int, 
-    num_freqs: int = 4
+    positions: torch.Tensor, x_max: int, y_max: int, num_freqs: int = 4
 ) -> torch.Tensor:
     """
     positions: (...,2) tensor of (x, y) pixel coords
@@ -73,7 +70,9 @@ def positional_embedding(
     y = positions[..., 1] / y_max
 
     # create frequency bands: [1, 2, 4, 8, ...]
-    freq_bands = 2.0 ** torch.arange(num_freqs, device=positions.device, dtype=positions.dtype)  # (num_freqs,)
+    freq_bands = 2.0 ** torch.arange(
+        num_freqs, device=positions.device, dtype=positions.dtype
+    )  # (num_freqs,)
 
     # angles = pos_norm * freq * π
     angles_x = x.unsqueeze(-1) * freq_bands * math.pi  # (..., num_freqs)
@@ -84,7 +83,7 @@ def positional_embedding(
     pe_y = torch.cat([angles_y.sin(), angles_y.cos()], dim=-1)  # (..., 2*num_freqs)
 
     # final embedding: [sin_x,cos_x, sin_y,cos_y] across freqs
-    pe = torch.cat([pe_x, pe_y], dim=-1)                        # (..., 4*num_freqs)
+    pe = torch.cat([pe_x, pe_y], dim=-1)  # (..., 4*num_freqs)
 
     return pe
 
@@ -111,11 +110,14 @@ class Metrics(ABC):
 
 
 class LERFMetrics(Metrics):
-    def __init__(self, label_folder: Path, 
-            rendered_folder: Path, 
-            text_encoder: Literal["maskclip", "SAM2OpenCLIP", "SAMOpenCLIP"], 
-            enable_pca: int|None = None,
-            instance_segmentation: bool = True):
+    def __init__(
+        self,
+        label_folder: Path,
+        rendered_folder: Path,
+        text_encoder: Literal["maskclip", "SAM2OpenCLIP", "SAMOpenCLIP"],
+        enable_pca: int | None = None,
+        instance_segmentation: bool = True,
+    ):
         super().__init__(label_folder, rendered_folder)
         self.text_encoder = TextEncoder(text_encoder, torch.device("cuda"))
         self.background_text = BACKGROUND_WORDS
@@ -160,7 +162,9 @@ class LERFMetrics(Metrics):
 
         return result
 
-    def compute_metrics(self, save_path: Path, mode: Literal["feature_map", "attention_map"]) -> Dict[str, Any]:
+    def compute_metrics(
+        self, save_path: Path, mode: Literal["feature_map", "attention_map"]
+    ) -> Dict[str, Any]:
         """
         Compute the metrics
         """
@@ -203,14 +207,13 @@ class LERFMetrics(Metrics):
                 feature_path = self.rendered_folder / "AttentionMap" / f"{basename}.pt"
             else:
                 raise ValueError(f"Invalid mode: {mode}")
-            
+
             if not feature_path.exists():
                 raise FileNotFoundError(f"No feature file found for {feature_path}")
             rendered_feature = torch.load(str(feature_path)).cuda()
 
             feature_metrics = self.feature_metrics(
-                rendered_feature, gt_masks_tensor, unique_categories,
-                mode
+                rendered_feature, gt_masks_tensor, unique_categories, mode
             )
             image_metrics = self.image_metrics(rendered_image, gt_image)
 
@@ -315,31 +318,67 @@ class LERFMetrics(Metrics):
         metrics = {"psnr": psnr, "ssim": ssim}
         return metrics
 
+
+
+    def morph_smooth(self, masks: torch.Tensor, k: int = 3, iters: int = 1) -> torch.Tensor:
+        """
+        masks: (B, H, W) binary {0,1}
+        k: kernel size (odd)
+        iters: how many times to apply opening+closing
+        """
+        assert masks.dim() == 3
+        B, H, W = masks.shape
+        x = masks.unsqueeze(1).float()  # (B,1,H,W)
+        pad = k // 2
+        weight = torch.ones(1, 1, k, k, device=x.device)
+
+        for _ in range(iters):
+            # Erode: keep pixel if all neighbors ==1
+            erode = (F.conv2d(x, weight, padding=pad) == k*k).float()
+            # Dilate: pixel becomes 1 if any neighbor ==1
+            dilate = (F.conv2d(erode, weight, padding=pad) > 0).float()
+            # Opening done (erode->dilate) removes small bright noise
+            x = dilate
+            # Closing: dilate then erode (fills small dark holes)
+            dil = (F.conv2d(x, weight, padding=pad) > 0).float()
+            x = (F.conv2d(dil, weight, padding=pad) == k*k).float()
+
+        return x.squeeze(1)
+
+
     def feature_metrics(
         self,
         rendered_feature: torch.Tensor,
         masks_tensor: torch.Tensor,
         unique_categories: List[str],
-        mode: Literal["feature_map", "attention_map", "drsplat"]
+        mode: Literal["feature_map", "attention_map", "drsplat"],
     ) -> Dict[str, Any]:
         """
         Compute the metrics for the feature
         """
 
         if mode == "feature_map":
-            predicted_labels, attention_scores = self.feature_map2labels(rendered_feature, unique_categories)
+            predicted_labels, attention_scores = self.feature_map2labels(
+                rendered_feature, unique_categories
+            )
             H, W, _ = rendered_feature.shape
         elif mode == "attention_map":
-            predicted_labels, attention_scores = self.attention_map2labels(rendered_feature, unique_categories)
-            H, W, _= rendered_feature.shape
+            predicted_labels, attention_scores = self.attention_map2threshold(
+                rendered_feature, unique_categories
+            )
+            H, W, _ = rendered_feature.shape
         elif mode == "drsplat":
-            predicted_labels, attention_scores = self.drsplat2labels(rendered_feature, unique_categories)
-            H, W, _= rendered_feature.shape
+            predicted_labels, attention_scores = self.drsplat2labels(
+                rendered_feature, unique_categories
+            )
+            H, W, _ = rendered_feature.shape
         else:
             raise ValueError(f"Invalid mode: {mode}")
 
         segmentation_masks = predicted_labels.view(-1, H, W)
-
+        segmentation_masks = self.morph_smooth(segmentation_masks, k=3, iters=1)
+        segmentation_masks = self.keep_largest_component_fill_holes(segmentation_masks)
+        
         num_classes = len(unique_categories)
         max_coords = []
         for cls in range(num_classes):
@@ -368,31 +407,36 @@ class LERFMetrics(Metrics):
 
         return metrics
 
-    def drsplat2labels(self, attn_scores: torch.Tensor, prompts: List[str]) -> Tuple[torch.Tensor, torch.Tensor]:
+    def drsplat2labels(
+        self, attn_scores: torch.Tensor, prompts: List[str]
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         In their code, it use 4 background words, and compare with threshold 0.5,
         0.5 means higher than any of the backgournd words, while do not compare with other words.
-    
+
         Args:
           attn_scores: (H, W, B) float tensor of attention scores.
           prompts:     list of length B
           threshold:   minimum attention to keep a one-hot “1”; below → 0.
-    
+
         Returns:
           mask:        (B, H, W) LongTensor with 0/1
           attn_scores: unchanged input, for downstream use
         """
-        positive_attention_score = attn_scores[..., :len(prompts)]
-        background_attention_score = attn_scores[..., len(prompts):]
-        threshold = background_attention_score.max(dim=-1).values # 0.5 means simple comparison with background words
-
+        positive_attention_score = attn_scores[..., : len(prompts)]
+        background_attention_score = attn_scores[..., len(prompts) :]
+        threshold = background_attention_score.max(
+            dim=-1
+        ).values  # 0.5 means simple comparison with background words
 
         masks = positive_attention_score > threshold[..., None]
         masks = masks.permute(2, 0, 1).long()
 
         return masks, attn_scores
-    
-    def feature_map2labels(self, feature_map: torch.Tensor, texts: List[str]) -> Tuple[torch.Tensor, torch.Tensor]:
+
+    def feature_map2labels(
+        self, feature_map: torch.Tensor, texts: List[str]
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Convert the feature map to labels, as well as the attention scores
         feature_map: (H, W, C)
@@ -401,63 +445,69 @@ class LERFMetrics(Metrics):
         """
         texts_query = texts + self.background_text
         text_features = self.text_encoder.encode_text(texts_query).float().squeeze()
-        attention_scores = self.compute_attention_with_positional_embedding(feature_map, text_features)
+        attention_scores = self.compute_attention_with_positional_embedding(
+            feature_map, text_features
+        )
 
-        predicted_labels = torch.argmax(attention_scores, dim=-1)  # Get highest similarity category index
+        predicted_labels = torch.argmax(
+            attention_scores, dim=-1
+        )  # Get highest similarity category index
 
         num_classes = int(predicted_labels.max().item()) + 1
         # one_hot: (H, W, B)
         one_hot = F.one_hot(predicted_labels, num_classes=num_classes)
-        
+
         # reorder to (B, H, W)
         one_hot = one_hot.permute(2, 0, 1).contiguous()
 
-        return one_hot[:len(texts)], attention_scores
+        return one_hot[: len(texts)], attention_scores
 
     @torch.no_grad()
-    def attention_map2labels(    
+    def attention_map2labels(
         self,
         attn_scores: torch.Tensor,
         prompts: List[str],
-        threshold: float = 0.85,
+        threshold: float = 0.0,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Convert an (H, W, B) attention map into a (B, H, W) one-hot mask,
         then zero-out any pixel whose attention score < threshold.
-    
+
         Args:
           attn_scores: (H, W, B) float tensor of attention scores.
           prompts:     list of length B
           threshold:   minimum attention to keep a one-hot “1”; below → 0.
-    
+
         Returns:
           mask:        (B, H, W) LongTensor with 0/1
           attn_scores: unchanged input, for downstream use
         """
         # 1) find the top class per pixel
+
+        attn_scores = F.softmax(attn_scores, dim=-1)
         predicted = torch.argmax(attn_scores, dim=-1)  # (H, W)
-    
+
         B = len(prompts) + len(BACKGROUND_WORDS)
         # 2) one-hot encode into (H, W, B), then permute → (B, H, W)
-        one_hot = F.one_hot(predicted, num_classes=B)      # (H, W, B)
-        one_hot = one_hot.permute(2, 0, 1).contiguous()    # (B, H, W)
-    
+        one_hot = F.one_hot(predicted, num_classes=B)  # (H, W, B)
+        one_hot = one_hot.permute(2, 0, 1).contiguous()  # (B, H, W)
+
         # 3) build a threshold mask: True where attn >= threshold
         #    need to align dims: (H, W, B) → (B, H, W)
         thresh_mask = (attn_scores >= threshold).permute(2, 0, 1)  # bool (B, H, W)
-    
+
         # 4) combine: only keep one_hot==1 where thresh_mask is True
         mask = (one_hot.bool() & thresh_mask).long()  # (B, H, W), dtype=torch.int64
-    
-        return mask[:len(prompts)], attn_scores
-    
+
+        return mask[: len(prompts)], attn_scores
+
 
     @torch.no_grad()
     def attention_map2threshold(
         self,
         attn_scores: torch.Tensor,
         prompts: List[str],
-        threshold: float = 0.9,
+        threshold: float = 0.62,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Convert an (H, W, B) attention map into a (B, H, W) multi‐hot mask
@@ -476,58 +526,102 @@ class LERFMetrics(Metrics):
         total_B = len(prompts) + len(BACKGROUND_WORDS)
         assert B == total_B, "Expected exactly B'+|BG| channels"
 
+        # 1) compute per‐map mean & max in a fully vectorized way
+        flat = attn_scores.view(-1, B)  # (H*W, B)
+        means = flat.mean(dim=0).view(1, 1, B)  # (1,1,B)
+        maxs = flat.max(dim=0).values.view(1, 1, B)  # (1,1,B)
+        denom = (maxs - means).clamp(min=1e-8)  # (1,1,B)
+
+        # 2) rescale from mean→max, clamp to [0,1]
+        rescaled = ((attn_scores - means) / denom).clamp(0.0, 1.0)
+
         # 1) direct per‐channel threshold → bool mask (H, W, B)
-        bool_map = attn_scores >= threshold  # True wherever score >= threshold
+        bool_map = rescaled >= threshold  # True wherever score >= threshold
 
         # 2) permute to (B, H, W) and cast to int
         mask = bool_map.permute(2, 0, 1).long()  # (B, H, W)
 
         # 3) drop any background channels if you want only the prompt ones
-        return mask[:len(prompts)], attn_scores
+        return mask[: len(prompts)], attn_scores
 
+
+
+    def keep_largest_component_fill_holes(self, masks: torch.Tensor) -> torch.Tensor:
+        """
+        masks: (B,H,W) binary {0,1} torch.Tensor
+        Returns: (B,H,W) cleaned masks (largest component, holes filled)
+        """
+        assert masks.dim() == 3
+        out = []
+        for m in masks:
+            arr = (m.detach().cpu().numpy() > 0).astype(np.uint8)
+
+            # Label connected components (4- or 8-connectivity; use structure for 8)
+            structure = np.array([[1,1,1],
+                                  [1,1,1],
+                                  [1,1,1]], dtype=np.uint8)  # 8-connectivity
+            lbl, num = ndimage.label(arr, structure=structure)
+            if num == 0:
+                out.append(torch.zeros_like(m))
+                continue
+
+            # Find largest component (exclude background label 0)
+            sizes = ndimage.sum(arr, lbl, index=range(1, num+1))
+            largest_label = 1 + int(np.argmax(sizes))
+            largest = (lbl == largest_label)
+
+            # Fill holes inside that component
+            filled = ndimage.binary_fill_holes(largest)
+
+            out.append(torch.from_numpy(filled.astype(np.uint8)).to(m.device))
+        return torch.stack(out, dim=0)
     def compute_attention_with_positional_embedding(
         self,
-        features_hw_c: torch.Tensor,   # (H, W, C)
+        features_hw_c: torch.Tensor,  # (H, W, C)
         text_feats_b_c: torch.Tensor,  # (B, C)
-    ) -> torch.Tensor:                 # → (H, W, B)
+    ) -> torch.Tensor:  # → (H, W, B)
         H, W, C = features_hw_c.shape
-        B, _     = text_feats_b_c.shape
+        B, _ = text_feats_b_c.shape
 
         # 1) normalize
-        f = F.normalize(features_hw_c, dim=-1)   # (H,W,C)
+        f = F.normalize(features_hw_c, dim=-1)  # (H,W,C)
         t = F.normalize(text_feats_b_c, dim=-1)  # (B,C)
 
         # 2) standard attention score
-        attn = torch.einsum('hwc,bc->hwb', f, t)  # (H,W,B)
+        attn = torch.einsum("hwc,bc->hwb", f, t)  # (H,W,B)
 
         # 3) find the argmax location for each text‐class b
-        flat   = attn.view(-1, B)                # (H*W, B)
-        idx    = flat.argmax(dim=0)              # (B,) flat indices
-        ys     = idx // W
-        xs     = idx %  W
+        flat = attn.view(-1, B)  # (H*W, B)
+        idx = flat.argmax(dim=0)  # (B,) flat indices
+        ys = idx // W
+        xs = idx % W
         pos_b2 = torch.stack([xs, ys], dim=-1).float().to(features_hw_c.device)  # (B,2)
 
         # 4) build the positional grid for all pixels
         y_coords, x_coords = torch.meshgrid(
             torch.arange(H, device=features_hw_c.device),
             torch.arange(W, device=features_hw_c.device),
-            indexing='ij'
+            indexing="ij",
         )
         pos_hw2 = torch.stack([x_coords, y_coords], dim=-1).float()  # (H, W, 2)
 
         # 5) compute embeddings
-        pos_emb_hw = positional_embedding(pos_hw2, x_max=W-1, y_max=H-1)  # (H, W, 4)
-        pos_emb_b  = positional_embedding(pos_b2,  x_max=W-1, y_max=H-1)  # (B, 4)
+        pos_emb_hw = positional_embedding(
+            pos_hw2, x_max=W - 1, y_max=H - 1
+        )  # (H, W, 4)
+        pos_emb_b = positional_embedding(pos_b2, x_max=W - 1, y_max=H - 1)  # (B, 4)
 
         # 6) positional affinity score between each pixel and each class‐peak
-        pos_score = torch.einsum('hwe,be->hwb', pos_emb_hw, pos_emb_b)    # (H, W, B)
+        pos_score = torch.einsum("hwe,be->hwb", pos_emb_hw, pos_emb_b)  # (H, W, B)
 
         # 7) combine
-        return attn + self.position_embedding_weight * pos_score     
-
+        return attn + self.position_embedding_weight * pos_score
 
     def mIoU(
-        self, segmentation_masks: torch.Tensor, masks_tensor: torch.Tensor, weighted: bool = False
+        self,
+        segmentation_masks: torch.Tensor,
+        masks_tensor: torch.Tensor,
+        weighted: bool = False,
     ) -> Tuple[List[float], float]:
 
         """
@@ -537,10 +631,10 @@ class LERFMetrics(Metrics):
         Args:
             predicted_dense_masks (torch.Tensor): (B, H, W) tensor where each pixel's value represents its predicted class label.
             gt_bindary_masks (torch.Tensor): (B, H, W) tensor where each pixel's value represents its ground truth class label.
-            weighted (bool): Whether to use weighted mIoU. 
+            weighted (bool): Whether to use weighted mIoU.
             Some people use the number of pixels in the ground truth mask as the weight,
             some people use the number of pixels in the predicted mask as the weight.
-            Some don't use weighted mIoU. 
+            Some don't use weighted mIoU.
 
         Returns:
             Tuple[List[float], float]: A tuple containing:
@@ -548,10 +642,11 @@ class LERFMetrics(Metrics):
                 - The weighted overall mIoU for the frame.
         """
 
-        H,W = masks_tensor[0].shape  # (height, width)
+        H, W = masks_tensor[0].shape  # (height, width)
         B, H1, W1 = segmentation_masks.shape
-        assert H == H1 and W == W1, "The shape of the predicted and ground truth masks must be the same"
-
+        assert (
+            H == H1 and W == W1
+        ), "The shape of the predicted and ground truth masks must be the same"
 
         IoUs = []
         weights = []
@@ -576,7 +671,7 @@ class LERFMetrics(Metrics):
 
         # Calculate overall mIoU as a weighted average using the ground truth pixel counts as weights
         total_weight = sum(weights)
-        if weighted:    
+        if weighted:
             overall_miou = (
                 (sum(iou * w for iou, w in zip(IoUs, weights)) / total_weight)
                 if total_weight > 0
@@ -663,7 +758,9 @@ class LERFMetrics(Metrics):
         [Rendered image | GT image]
         [Rendered segmentation | GT segmentation]
         """
-        segmentation_masks = metrics["segmentation_masks"] # Notice that the shape is (B, H, W), sparse mask
+        segmentation_masks = metrics[
+            "segmentation_masks"
+        ]  # Notice that the shape is (B, H, W), sparse mask
         B, H, W = segmentation_masks.shape
         num_classes = len(unique_category_text)
         cmap = plt.cm.get_cmap("tab20", num_classes)
@@ -685,9 +782,9 @@ class LERFMetrics(Metrics):
             gt_np = np.transpose(gt_np, (1, 2, 0))
 
         rendered_seg = _colorize_sparse_masks(
-            segmentation_masks,   # your sparse (B,H,W)
-            colors,               # RGBA colormap array
-            alpha=1
+            segmentation_masks,  # your sparse (B,H,W)
+            colors,  # RGBA colormap array
+            alpha=1,
         )
 
         # GT segmentation mask (color)
@@ -744,11 +841,10 @@ class LERFMetrics(Metrics):
         return result
 
 
-
 def _colorize_sparse_masks(
-    sparse_masks,        # torch sparse_coo_tensor or dense Tensor, shape (B,H,W)
-    colors,              # np.ndarray of shape (num_classes,4) RGBA
-    alpha: float = 0.3
+    sparse_masks,  # torch sparse_coo_tensor or dense Tensor, shape (B,H,W)
+    colors,  # np.ndarray of shape (num_classes,4) RGBA
+    alpha: float = 0.3,
 ) -> np.ndarray:
     """
     Returns an (H, W, 3) uint8 RGB image where each class b
@@ -768,12 +864,12 @@ def _colorize_sparse_masks(
     for b in range(B):
         # boolean mask for class b
         m = mask_np[b].astype(bool)  # (H,W)
-        if not m.any():  
+        if not m.any():
             continue
         color = colors[b, :3]  # RGB in [0,1]
         # blend: new = old*(1-alpha) + color*alpha
         canvas[m] = canvas[m] * (1 - alpha) + color * alpha
 
     # convert to uint8
-    canvas = (canvas * 255).clip(0,255).astype(np.uint8)
+    canvas = (canvas * 255).clip(0, 255).astype(np.uint8)
     return canvas

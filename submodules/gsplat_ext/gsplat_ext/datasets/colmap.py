@@ -19,6 +19,7 @@ from .normalize import (
     load_image_features,
 )
 
+
 def _get_rel_paths(path_dir: str) -> List[str]:
     """Recursively get relative paths of files in a directory."""
     paths = []
@@ -368,9 +369,9 @@ class Dataset:
         self.feature_folder = feature_folder
         indices = np.arange(len(self.parser.image_names))
         if split == "train":
-            self.indices = indices[indices % self.parser.test_every != 0]
+            self.indices = indices[(indices+1) % self.parser.test_every != 0]
         else:
-            self.indices = indices[indices % self.parser.test_every == 0]
+            self.indices = indices[(indices+1) % self.parser.test_every == 0]
 
     def __len__(self):
         return len(self.indices)
@@ -440,7 +441,9 @@ class Dataset:
             # Load features if available.
             base_name = os.path.splitext(self.parser.image_names[index])[0]
             if self.feature_folder is not None:
-                data["features"] = load_image_features(Path(self.parser.image_paths[index]), Path(self.feature_folder))
+                data["features"] = load_image_features(
+                    Path(self.parser.image_paths[index]), Path(self.feature_folder)
+                )
             else:
                 feature_path = os.path.join(
                     self.parser.data_dir, "features", f"{base_name}.pt"

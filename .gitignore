@@ -14,3 +14,5 @@ experiment
 /dataset_parser
 /__pycache__
 results
+/debugging
+/debugging_no_miou
