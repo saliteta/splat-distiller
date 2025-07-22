@@ -3,6 +3,7 @@ from argparse import ArgumentParser
 from pathlib import Path
 from omegaconf import OmegaConf, DictConfig
 import hydra
+from typing import Union
 
 lerf_ovs_scenes = [
     "figurines",
@@ -10,6 +11,26 @@ lerf_ovs_scenes = [
     "teatime",
     "waldo_kitchen",
 ]
+
+
+def ckpt_path(scene_name: str, output_path: Path, method: str, extension: str, max_steps: Union[int, None] = None):
+
+    if extension == "INRIA":
+        return output_path / method / scene_name / 'point_cloud/iteration_30000/scene_point_cloud.ply'
+    else:
+        base_path = output_path / scene_name / method
+        if max_steps is None:
+            raise ValueError("max_steps is required for non-INRIA scenes")
+        if method == "3DGS":
+            return base_path / "ckpts" / f"ckpt_{max_steps-1}_rank0.pt"
+        elif method == "2DGS":
+            return base_path / "ckpts" / f"ckpt_{max_steps-1}.pt"
+        elif method == "DBS":
+            return base_path / "point_cloud" / f"iteration_{max_steps}/point_cloud.ply"
+        else:
+            raise ValueError(f"Invalid method: {method}")
+
+        
 
 
 def run_lerf_ovs_evaluation(args: DictConfig):
@@ -77,54 +98,17 @@ def run_lerf_ovs_evaluation(args: DictConfig):
                 )
                 continue
             print(f"Lifting {scene}...")
-            if args.training.splat_method == "3DGS":
-                if args.extension == "INRIA":
-                    ckpt = (
-                        output_path
-                        / args.training.splat_method
-                        / scene_name
-                        / 'point_cloud/iteration_30000/scene_point_cloud.ply'
-                    )
-                else:
-                    ckpt = (
-                        output_path
-                        / scene_name
-                        / args.training.splat_method
-                        / "ckpts"
-                        / f"ckpt_{args.training.max_steps-1}_rank0.pt"
-                    )
-                os.system(
-                    f"python -W ignore distill.py --data-dir {scene} --ckpt {ckpt} --feature-folder {args.feature_extraction.folder} \
-                        --quantize {args.distillation.quantize} --splat-method {args.training.splat_method}"
-                )
-            elif args.training.splat_method == "2DGS":
-                ckpt = (
-                    output_path
-                    / scene_name
-                    / args.training.splat_method
-                    / "ckpts"
-                    / f"ckpt_{args.training.max_steps-1}.pt"
-                )
-                os.system(
-                    f"python -W ignore distill.py --data-dir {scene} --ckpt {ckpt} --feature-folder {args.feature_extraction.folder} \
-                        --quantize {args.distillation.quantize} --splat-method {args.training.splat_method}"
-                )
-            elif args.training.splat_method == "DBS":
-                ckpt = (
-                    output_path
-                    / scene_name
-                    / args.training.splat_method
-                    / "point_cloud"
-                    / f"iteration_{args.training.max_steps}/point_cloud.ply"
-                )
-                os.system(
-                    f"python -W ignore distill.py --data-dir {scene} --ckpt {ckpt} --feature-folder {args.feature_extraction.folder} \
-                        --quantize {args.distillation.quantize} --splat-method {args.training.splat_method} --filter {args.distillation.filter}"
-                )
+            if args.extension == "INRIA":
+                ckpt = ckpt_path(scene_name, output_path, args.training.splat_method, args.extension, None)
             else:
-                raise ValueError(
-                    f"Invalid training method: {args.training.splat_method}"
-                )
+                ckpt = ckpt_path(scene_name, output_path, args.training.splat_method, args.extension, args.training.max_steps)
+            
+
+            ### We are trying to use tikhonov regularization to distill the model
+            os.system(
+                f"python -W ignore distill.py --dir {scene} --ckpt {ckpt} --feature_folder {args.feature_extraction.folder} \
+                    --quantize {args.distillation.quantize} --method {args.training.splat_method} --tikhonov {args.distillation.tikhonov}"
+            )
 
     if not args.skip.evaluation:
         for scene in lerf_base_path.iterdir():
@@ -134,6 +118,11 @@ def run_lerf_ovs_evaluation(args: DictConfig):
                     f"Skipping {scene_name} as it is not in the predefined scenes list."
                 )
                 continue
+            if args.extension == "INRIA":
+                ckpt = ckpt_path(scene_name, output_path, args.training.splat_method, args.extension, None)
+            else:
+                ckpt = ckpt_path(scene_name, output_path, args.training.splat_method, args.extension, args.training.max_steps)
+            
             label_path = lerf_base_path / "label" / scene_name
             if args.extension == "drsplat":
                 result_scene = output_path / args.training.splat_method / scene_name
@@ -146,55 +135,17 @@ def run_lerf_ovs_evaluation(args: DictConfig):
                 )
                 feature_ckpt = ckpt.parent / (ckpt.stem + "_features.pt")
                 os.system(
-                    f"python -W ignore eval.py --data-dir {scene} --result-dir {result_scene} --label-dir {label_path} \
+                    f"python -W ignore eval.py --dir {scene} --result_folder {result_scene} --label_folder {label_path} \
                         --ckpt {ckpt} --text-encoder {args.feature_extraction.method} --feature-ckpt {feature_ckpt} \
-                        --rendering-mode {args.evaluation.rendering_mode} --metrics {args.evaluation.metrics} --faiss-index-path {args.faiss_index_path}"
+                        --result_type {args.evaluation.result_type} --method {args.training.splat_method} --faiss-index-path {args.faiss_index_path}"
                 )
             elif args.extension == "None" or args.extension == "INRIA":
                 result_scene = output_path / scene_name / args.training.splat_method
                 if args.extension == "INRIA":
                     result_scene = output_path / args.training.splat_method / scene_name
-                if args.training.splat_method == "2DGS":
-                    ckpt = (
-                        output_path
-                        / scene_name
-                        / args.training.splat_method
-                        / "ckpts"
-                        / f"ckpt_{args.training.max_steps-1}.pt"
-                    )
-                elif args.training.splat_method == "DBS":
-                    if args.distillation.filter:
-                        ckpt = (
-                            output_path
-                            / scene_name
-                            / args.training.splat_method
-                            / "point_cloud"
-                            / f"iteration_{args.training.max_steps}/point_cloud_filtered.pt"
-                        )
-                    else:
-                        ckpt = (
-                            output_path
-                            / scene_name
-                            / args.training.splat_method
-                            / "point_cloud"
-                            / f"iteration_{args.training.max_steps}/point_cloud.ply"
-                        )
-                else:
-                    if args.extension == "INRIA":
-                        ckpt = (
-                            output_path
-                            / args.training.splat_method
-                            / scene_name
-                            / 'point_cloud/iteration_30000/scene_point_cloud.ply'
-                        )
-                    else:
-                        ckpt = (
-                            output_path
-                            / scene_name
-                            / args.training.splat_method
-                            / "ckpts"
-                            / f"ckpt_{args.training.max_steps-1}_rank0.pt"
-                        )
+
+
+                
 
                 if args.distillation.quantize and 'SAMOpenCLIP' not in args.feature_extraction.method:
                     feature_ckpt = ckpt.parent / (ckpt.stem + "_quantized_features.pt")
@@ -203,9 +154,9 @@ def run_lerf_ovs_evaluation(args: DictConfig):
                 else:
                     feature_ckpt = ckpt.parent / (ckpt.stem + "_features.pt")
                 os.system(
-                    f"python -W ignore eval.py --data-dir {scene} --result-dir {result_scene} --label-dir {label_path} \
-                    --ckpt {ckpt} --text-encoder {args.feature_extraction.method} --feature-ckpt {feature_ckpt} \
-                    --rendering-mode {args.evaluation.rendering_mode} --metrics {args.evaluation.metrics} --splat-method {args.training.splat_method}"
+                    f"python -W ignore eval.py --dir {scene} --result_folder {result_scene} --label_folder {label_path} \
+                    --ckpt {ckpt} --text_encoder {args.feature_extraction.method} --feature_ckpt {feature_ckpt} \
+                    --result_type {args.evaluation.metrics} --method {args.training.splat_method}"
                 )
             else:
                 raise ValueError(f"Invalid extension: {args.extension}")

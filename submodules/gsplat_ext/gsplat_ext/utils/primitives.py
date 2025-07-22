@@ -127,17 +127,23 @@ class GaussianPrimitive(Primitive):
         self._feature = None
         self._source_data = {}
     
-    def from_file(self, file_path: Union[str, Path], feature_path: Optional[Union[str, Path]] = None, args: Optional[dict] = None) -> None:
+    def from_file(self, file_path: Union[str, Path], feature_path: Optional[Union[str, Path]] = None, args: Optional[dict] = None, tikhonov: Union[float, None] = None) -> None:
         if file_path.endswith(".ply"):
-            self._load_ply(file_path, args)
+            self._load_ply(file_path, tikhonov=tikhonov, args=args)
         elif file_path.endswith(".pt"):
-            self._from_ckpt(file_path)
+            self._from_ckpt(file_path, tikhonov=tikhonov, args=args)
         else:
             raise ValueError(f"Unsupported file type: {file_path}")
         if feature_path is not None:
             self._feature = torch.load(feature_path, map_location="cuda")
         else:
-            self._feature = None
+            possible_feature_path = Path(file_path).parent / (
+                Path(file_path).stem + "_features.pt"
+            )
+            if os.path.exists(possible_feature_path):
+                self._feature = torch.load(possible_feature_path, map_location="cuda")
+            else:
+                self._feature = None
 
 
     def _from_ckpt(
@@ -158,7 +164,11 @@ class GaussianPrimitive(Primitive):
         means = ckpt["means"]
         quats = F.normalize(ckpt["quats"], p=2, dim=-1)
         scales = torch.exp(ckpt["scales"])
-        opacities = torch.sigmoid(ckpt["opacities"])
+        if tikhonov is not None:
+            opacities = torch.sigmoid(ckpt["opacities"] * tikhonov)
+        else:
+            opacities = torch.sigmoid(ckpt["opacities"])
+
         sh0 = ckpt["sh0"]
         shN = ckpt["shN"]
         colors = torch.cat([sh0, shN], dim=-2)
@@ -190,7 +200,7 @@ class GaussianPrimitive(Primitive):
             self._feature = None
         print("Number of Gaussians:", len(means))
 
-    def _load_ply(self, path, use_train_test_exp = False):
+    def _load_ply(self, path, use_train_test_exp = False, tikhonov: Union[float, None] = None, args: Optional[dict] = None):
         plydata = PlyData.read(path)
 
         xyz = np.stack((np.asarray(plydata.elements[0]["x"]),
@@ -244,7 +254,10 @@ class GaussianPrimitive(Primitive):
 
         quats = F.normalize(quats, p=2, dim=-1)
         scales = torch.exp(scales)
-        opacities = torch.sigmoid(opacities)
+        if tikhonov is not None:
+            opacities = torch.sigmoid(opacities*tikhonov)
+        else:
+            opacities = torch.sigmoid(opacities)
         self._geometry = {
             "means": means,
             "quats": quats,

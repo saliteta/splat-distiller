@@ -395,9 +395,9 @@ class lerf_evaluator(base_evaluator):
             cv2.imwrite(str(saving_path / f"{prompts[i]}.png"), heatmap)
 
             # Save histogram of the original (not color-mapped) attention map for this prompt
-            attn_map_flat = attention_map[:, i].cpu().numpy().flatten()
+            attn_map_flat = attention_map[..., i].cpu().numpy().flatten()
             plt.figure()
-            plt.hist(attn_map_flat, bins=50, color='blue', alpha=0.7)
+            plt.hist(attn_map_flat, bins=40, color='blue', alpha=0.7)
             plt.title(f"Attention Map Histogram: {prompts[i]}")
             plt.xlabel("Rescaled Attention Value")
             plt.ylabel("Pixel Count")

@@ -59,7 +59,7 @@ class Config:
     # Directory to save results
     result_dir: str = "results/garden"
     # Every N images there is a test image
-    test_every: int = 8
+    test_every: int = 10000
     # Random crop size for training  (experimental)
     patch_size: Optional[int] = None
     # A global scaler that applies to the scene size related parameters

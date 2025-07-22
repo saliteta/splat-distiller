@@ -33,59 +33,6 @@ from evaluator_loader import BACKGROUND_WORDS
 from scipy import ndimage
 import numpy as np
 
-def pca_reduce(X: torch.Tensor, c_prime: int) -> torch.Tensor:
-    """
-    Perform PCA on X (n × c) to reduce it to shape (n × c_prime) using scikit-learn (CPU).
-
-    Args:
-        X:        Tensor of shape (n, c)
-        c_prime:  Target number of principal components
-
-    Returns:
-        Tensor of shape (n, c_prime) containing the projected data.
-    """
-    # 1) Move to CPU and convert to NumPy
-    X_np = X.detach().cpu().numpy()
-
-    # 2) Fit PCA and transform
-    pca = PCA(n_components=c_prime)
-    X_reduced_np = pca.fit_transform(X_np)
-
-    # 3) Convert back to torch.Tensor (on CPU)
-    return torch.from_numpy(X_reduced_np).cuda()
-
-
-def positional_embedding(
-    positions: torch.Tensor, x_max: int, y_max: int, num_freqs: int = 4
-) -> torch.Tensor:
-    """
-    positions: (...,2) tensor of (x, y) pixel coords
-    x_max, y_max: maximum x and y values for normalization
-    num_freqs: number of frequency bands per axis;
-               total output dim = 4 * num_freqs (→ 16 if num_freqs=4)
-    returns: (..., 4*num_freqs) positional embedding
-    """
-    # normalize to [0,1]
-    x = positions[..., 0] / x_max
-    y = positions[..., 1] / y_max
-
-    # create frequency bands: [1, 2, 4, 8, ...]
-    freq_bands = 2.0 ** torch.arange(
-        num_freqs, device=positions.device, dtype=positions.dtype
-    )  # (num_freqs,)
-
-    # angles = pos_norm * freq * π
-    angles_x = x.unsqueeze(-1) * freq_bands * math.pi  # (..., num_freqs)
-    angles_y = y.unsqueeze(-1) * freq_bands * math.pi  # (..., num_freqs)
-
-    # stack sin & cos per axis
-    pe_x = torch.cat([angles_x.sin(), angles_x.cos()], dim=-1)  # (..., 2*num_freqs)
-    pe_y = torch.cat([angles_y.sin(), angles_y.cos()], dim=-1)  # (..., 2*num_freqs)
-
-    # final embedding: [sin_x,cos_x, sin_y,cos_y] across freqs
-    pe = torch.cat([pe_x, pe_y], dim=-1)  # (..., 4*num_freqs)
-
-    return pe
 
 
 class Metrics(ABC):
@@ -266,7 +213,7 @@ class LERFMetrics(Metrics):
         """
         json_dict = json.load(open(json_path, "r"))
         aggregated_masks = {}
-        unique_categories = []
+        unique_categories = {}
 
         W = json_dict["info"]["width"]
         H = json_dict["info"]["height"]
@@ -290,13 +237,15 @@ class LERFMetrics(Metrics):
                 aggregated_masks[category] = np.maximum(
                     aggregated_masks[category], mask
                 )
+                unique_categories[category] += 1
             else:
                 aggregated_masks[category] = mask
-                unique_categories.append(category)
+                unique_categories[category] = 1
 
         # Stack masks into a single torch.Tensor with shape (num_categories, H, W)
+        unique_categories = list(unique_categories.items())
         masks_tensor = torch.from_numpy(
-            np.stack([aggregated_masks[cat] for cat in unique_categories])
+            np.stack([aggregated_masks[cat] for cat, _ in unique_categories])
         )
 
         return masks_tensor, unique_categories
@@ -317,7 +266,6 @@ class LERFMetrics(Metrics):
         )
         metrics = {"psnr": psnr, "ssim": ssim}
         return metrics
-
 
 
     def morph_smooth(self, masks: torch.Tensor, k: int = 3, iters: int = 1) -> torch.Tensor:
@@ -356,20 +304,20 @@ class LERFMetrics(Metrics):
         """
         Compute the metrics for the feature
         """
-
+        unique_categories_str = [cat for cat, _ in unique_categories]
         if mode == "feature_map":
             predicted_labels, attention_scores = self.feature_map2labels(
-                rendered_feature, unique_categories
+                rendered_feature, unique_categories_str
             )
             H, W, _ = rendered_feature.shape
         elif mode == "attention_map":
-            predicted_labels, attention_scores = self.attention_map2threshold(
+            predicted_labels, attention_scores = self.attention_map2auto_threshold(
                 rendered_feature, unique_categories
             )
             H, W, _ = rendered_feature.shape
         elif mode == "drsplat":
             predicted_labels, attention_scores = self.drsplat2labels(
-                rendered_feature, unique_categories
+                rendered_feature, unique_categories_str
             )
             H, W, _ = rendered_feature.shape
         else:
@@ -463,43 +411,146 @@ class LERFMetrics(Metrics):
         return one_hot[: len(texts)], attention_scores
 
     @torch.no_grad()
-    def attention_map2labels(
+    def attention_map2auto_threshold(
         self,
-        attn_scores: torch.Tensor,
-        prompts: List[str],
-        threshold: float = 0.0,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        attn_scores: torch.Tensor,   # (H, W, B)
+        prompts: List[Tuple[str, int]],
+        min_bin: int = 40,
+        min_peak_count: int = 600,
+        use_rescale: bool = False,
+        percentile_fallback: float = 0.75,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        Convert an (H, W, B) attention map into a (B, H, W) one-hot mask,
-        then zero-out any pixel whose attention score < threshold.
-
-        Args:
-          attn_scores: (H, W, B) float tensor of attention scores.
-          prompts:     list of length B
-          threshold:   minimum attention to keep a one-hot “1”; below → 0.
+        Auto-threshold each channel by histogram peak→valley heuristic.
 
         Returns:
-          mask:        (B, H, W) LongTensor with 0/1
-          attn_scores: unchanged input, for downstream use
+            mask:          (B', H, W) binary (0/1) LongTensor for prompt channels
+            thresholds:    (B,) float tensor of chosen thresholds in *original (or rescaled) range*
+            rescaled_map:  (H, W, B) float tensor actually thresholded (may be same as input if use_rescale=False)
         """
-        # 1) find the top class per pixel
+        H, W, B= attn_scores.shape
+        total_B = len(prompts)  + len(BACKGROUND_WORDS)
+        assert B == total_B, f"Expected {total_B} channels, got {B}"
 
-        attn_scores = F.softmax(attn_scores, dim=-1)
-        predicted = torch.argmax(attn_scores, dim=-1)  # (H, W)
+        x = attn_scores
 
-        B = len(prompts) + len(BACKGROUND_WORDS)
-        # 2) one-hot encode into (H, W, B), then permute → (B, H, W)
-        one_hot = F.one_hot(predicted, num_classes=B)  # (H, W, B)
-        one_hot = one_hot.permute(2, 0, 1).contiguous()  # (B, H, W)
+        # Optional per-channel rescale (as in your original code)
+        if use_rescale:
+            flat = x.view(-1, B)                      # (H*W, B)
+            means = flat.mean(dim=0).view(1, 1, B)
+            maxs  = flat.max(dim=0).values.view(1, 1, B)
+            denom = (maxs - means).clamp_min(1e-8)
+            rescaled = ((x - means) / denom).clamp(0.0, 1.0)
+        else:
+            rescaled = x
 
-        # 3) build a threshold mask: True where attn >= threshold
-        #    need to align dims: (H, W, B) → (B, H, W)
-        thresh_mask = (attn_scores >= threshold).permute(2, 0, 1)  # bool (B, H, W)
+        # Prepare output threshold tensor
+        thresholds = torch.zeros(B, device=attn_scores.device, dtype=attn_scores.dtype)
 
-        # 4) combine: only keep one_hot==1 where thresh_mask is True
-        mask = (one_hot.bool() & thresh_mask).long()  # (B, H, W), dtype=torch.int64
+        # We’ll do histogram on CPU for simplicity (speed fine for typical H,W)
+        # If needed, keep on GPU and use torch.histc in a loop.
+        res_cpu = rescaled.detach().cpu()
 
-        return mask[: len(prompts)], attn_scores
+        def compute_hist(channel_vals: torch.Tensor, bins: int):
+            # channel_vals: (H,W) -> flatten
+            v = channel_vals.reshape(-1)
+            # We assume values are in [0,1] if rescaled; otherwise compute min/max
+            vmin = 0.0 if use_rescale else float(v.min())
+            vmax = 1.0 if use_rescale else float(v.max())
+            if vmax <= vmin + 1e-12:
+                # Degenerate; return single bin
+                counts = torch.tensor([v.numel()], dtype=torch.long)
+                edges = torch.linspace(vmin, vmax + 1e-6, steps=2)
+                return counts, edges
+            # torch.histc gives counts over evenly spaced bins (excluding rightmost edge)
+            counts = torch.histc(v, bins=bins, min=vmin, max=vmax)
+            # Build edges to match (bins+1)
+            edges = torch.linspace(vmin, vmax, steps=bins + 1)
+            return counts.long(), edges
+
+        def find_peak_valley(counts: torch.Tensor, instance_count: int):
+            """
+            counts: (bins,) long
+            Returns: (peak_idx, valley_idx or None)
+            Peak: local max; Valley: first local min to right with lower count.
+            """
+            bins = counts.numel()
+            # Identify local maxima
+            # For interior bins: c[i] >= c[i-1] and c[i] >= c[i+1]
+            # Treat edges carefully
+            local_max = []
+            for i in range(bins):
+                left  = counts[i-1] if i-1 >= 0 else counts[i]
+                right = counts[i+1] if i+1 < bins else counts[i]
+                if counts[i] >= left and counts[i] >= right:
+                    local_max.append(i)
+            if not local_max:
+                return None, None
+            # Filter by min_peak_count
+            local_max = [i for i in local_max if counts[i] >= min_peak_count]
+            if not local_max:
+                return None, None
+            # Largest peak (argmax count); tie → earliest
+            if len(local_max) < instance_count:
+                peak_idx = local_max[-1]
+            else:
+                peak_idx = local_max[-instance_count]
+
+            # Find valley to the right
+            peak_height = counts[peak_idx]
+            valley_idx = None
+            for j in range(peak_idx, 0, -1):
+                # local minimum
+                if counts[j] <= counts[j-1] and counts[j] <= counts[j+1] and counts[j] < peak_height:
+                    valley_idx = j
+                    break
+            # If no interior valley, optionally take last decreasing point
+            if valley_idx is None:
+                # find last index where counts strictly lower than peak
+                for j in range(bins - 1, peak_idx, -1):
+                    if counts[j] < peak_height:
+                        valley_idx = j
+                        break
+            return peak_idx, valley_idx
+
+        for b in range(len(prompts)):
+            channel = res_cpu[..., b]
+            counts, edges = compute_hist(channel, bins=min_bin)
+            
+            peak_idx, valley_idx = find_peak_valley(counts, prompts[b][1])
+            if peak_idx is not None and valley_idx is not None:
+                # Threshold at midpoint of valley bin
+                left_edge  = edges[valley_idx].item()
+                right_edge = edges[valley_idx + 1].item()
+                th = 0.5 * (left_edge + right_edge)
+            else:
+                # Fallbacks
+                v_flat = channel.reshape(-1)
+                if v_flat.var().item() < 1e-10:
+                    th = float(v_flat.mean().item())  # nearly constant
+                else:
+                    # Try simple Otsu (coarse) with same histogram
+                    total = v_flat.numel()
+                    probs = counts.float() / total
+                    bin_centers = 0.5 * (edges[:-1] + edges[1:])
+                    w0 = torch.cumsum(probs, dim=0)
+                    w1 = 1 - w0
+                    mu0 = torch.cumsum(probs * bin_centers, dim=0) / (w0 + 1e-12)
+                    muT = (probs * bin_centers).sum()
+                    mu1 = (muT - torch.cumsum(probs * bin_centers, dim=0)) / (w1 + 1e-12)
+                    between = w0 * w1 * (mu0 - mu1) ** 2
+                    otsu_idx = torch.argmax(between).item()
+                    th_otsu = float(bin_centers[otsu_idx].item())
+                    # Blend with percentile fallback to avoid extreme cases
+                    perc = float(torch.quantile(v_flat, percentile_fallback))
+                    th = 0.5 * (th_otsu + perc)
+            thresholds[b] = th
+
+        # Build masks (B,H,W) then slice to prompt channels
+        # (Use rescaled map for thresholding, as histogram was computed there.)
+        mask_full = (rescaled >= thresholds.view(1, 1, B)).permute(2, 0, 1).long()
+        return mask_full[:len(prompts)], attn_scores
+
 
 
     @torch.no_grad()
@@ -507,7 +558,7 @@ class LERFMetrics(Metrics):
         self,
         attn_scores: torch.Tensor,
         prompts: List[str],
-        threshold: float = 0.62,
+        threshold: float = 0.65,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Convert an (H, W, B) attention map into a (B, H, W) multi‐hot mask
@@ -575,6 +626,7 @@ class LERFMetrics(Metrics):
 
             out.append(torch.from_numpy(filled.astype(np.uint8)).to(m.device))
         return torch.stack(out, dim=0)
+
     def compute_attention_with_positional_embedding(
         self,
         features_hw_c: torch.Tensor,  # (H, W, C)

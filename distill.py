@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from nerfview import apply_float_colormap
 import torch
 from gsplat_ext import Dataset, Parser
@@ -14,36 +15,46 @@ from gsplat_ext import GaussianRenderer, GaussianRenderer2D, BetaSplatRenderer
 from pathlib import Path
 from PIL import Image
 from application_beta.semantic_query.mask_label_registration import mask_register
+from argparser import DataArgs, DistillArgs, build_parser
 
 beta_filter_args = {
     "beta_filter_larde": 3.0,
 }
 
 
+
+
+
+
+
+
+
+
 class Runner:
     """Engine for training and testing."""
 
-    def __init__(self, args) -> None:
+    def __init__(self, data_args: DataArgs, distill_args: DistillArgs) -> None:
         set_random_seed(42)
 
-        self.args = args
+        self.data_args = data_args
+        self.distill_args = distill_args
         self.device = f"cuda"
 
-        self.set_dataset(args)
-        self.set_splat(args)  # set the splat primitive and renderer
+        self.set_dataset(data_args)
+        self.set_splat(distill_args)  # set the splat primitive and renderer
 
-    def set_dataset(self, args):
+    def set_dataset(self, data_args: DataArgs):
         # Load data: Training data should contain initial points and colors.
         self.parser = Parser(
-            data_dir=args.data_dir,
-            factor=args.data_factor,
-            test_every=args.test_every,
+            data_dir=data_args.dir,
+            factor=data_args.factor,
+            test_every=data_args.test_every,
         )
         trainset = Dataset(
             self.parser,
             split="train",
             load_features=True,
-            feature_folder=args.feature_folder,
+            feature_folder=data_args.feature_folder,
         )
         valset = Dataset(self.parser, split="val")
 
@@ -56,25 +67,25 @@ class Runner:
 
         self.scene_scale = self.parser.scene_scale * 1.1
 
-    def set_splat(self, args):
-        if args.splat_method == "2DGS":
+    def set_splat(self, distill_args: DistillArgs):
+        if distill_args.method == "2DGS":
             self.splats = GaussianPrimitive2D()
-            self.splats.from_file(args.ckpt)
+            self.splats.from_file(distill_args.ckpt, tikhonov=distill_args.tikhonov)
             self.renderer = GaussianRenderer2D(self.splats)
-        elif args.splat_method == "3DGS":
+        elif distill_args.method == "3DGS":
             self.splats = GaussianPrimitive()
-            self.splats.from_file(args.ckpt)
+            self.splats.from_file(distill_args.ckpt, tikhonov=distill_args.tikhonov)
             self.renderer = GaussianRenderer(self.splats)
-        elif args.splat_method == "DBS":
+        elif distill_args.method == "DBS":
             self.splats = BetaSplatPrimitive()
-            self.splats.from_file(args.ckpt)
+            self.splats.from_file(distill_args.ckpt)
             self.renderer = BetaSplatRenderer(self.splats)
         else:
-            raise ValueError(f"Invalid splat method: {args.splat_method}")
+            raise ValueError(f"Invalid splat method: {distill_args.method}")
 
         self.splats.to(self.device)
 
-        if args.filter:
+        if distill_args.filter:
             filter_set = Dataset(self.parser, split="train")
             filter_loader = torch.utils.data.DataLoader(
                 filter_set, batch_size=1, shuffle=False
@@ -84,9 +95,9 @@ class Runner:
                 self.splats.geometry["means"],
                 torch.device(self.device),
                 threshold=0.8,
-                args=beta_filter_args if args.splat_method == "DBS" else None,
+                args=beta_filter_args if distill_args.method == "DBS" else None,
             )
-            ckpt_path = Path(args.ckpt)
+            ckpt_path = Path(distill_args.ckpt)
             self.splats.save(ckpt_path.parent / (ckpt_path.stem + "_filtered.pt"))
 
     def quantize(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -120,7 +131,7 @@ class Runner:
         return assigned_features, prototypes, labels
 
     @torch.no_grad()
-    def distill(self, args):
+    def distill(self, distill_args: DistillArgs, data_args: DataArgs):
         """Entry for distillation."""
         print("Running distillation...")
         means = self.splats.geometry["means"]
@@ -181,32 +192,32 @@ class Runner:
         del self.splat_weights
         torch.cuda.empty_cache()
 
-        self.basename, _ = os.path.splitext(args.ckpt)
-        if self.args.filter:
+        self.basename, _ = os.path.splitext(distill_args.ckpt)
+        if distill_args.filter:
             torch.save(self.splat_features, self.basename + "_filtered_features.pt")
         else:
             torch.save(self.splat_features, self.basename + "_features.pt")
         
         self.splat_features = self.splat_features.cpu()
 
-        if self.args.quantize == "True":
+        if distill_args.quantize == "True":
             print("Quantize is set to True, Quantizing")
             _, _, self.labels = self.quantize()
             torch.save(self.labels, self.basename + "_labels.pt")
-            if 'SAMOpenCLIP' in args.feature_folder:
+            if 'SAMOpenCLIP' in data_args.feature_folder:
                 print("Detecting Using SAMOpenCLIP, apply refinement ...")
                 image_labels: Dict[str, torch.Tensor] = self.label_projection(self.labels)
                 del self.splats
                 torch.cuda.empty_cache()
-                refined = self.mask_level_refinement(args, image_labels)
+                refined = self.mask_level_refinement(data_args, image_labels)
                 torch.save(refined, self.basename + "_refined_features.pt")
 
 
     
-    def mask_level_refinement(self, args: argparse.Namespace, image_labels: Dict[str, torch.Tensor]):
-        mask_folder = Path(args.data_dir) / args.feature_folder 
+    def mask_level_refinement(self, data_args: DataArgs, image_labels: Dict[str, torch.Tensor]):
+        mask_folder = Path(data_args.dir) / data_args.feature_folder 
         # Notice that we only support SAMOpenCLIP for now, it can be further implemented to mask related
-        if "SAM" not in str(args.feature_folder):
+        if "SAM" not in str(data_args.feature_folder):
             print("we currently only support SAM OpenCLIP for refinement, theoratically it should work for all mask related results")
             raise NotImplementedError
         self.mask_registrater = mask_register(image_labels, mask_folder)
@@ -281,67 +292,12 @@ class Runner:
         return image_labels
 
 def main(local_rank: int, world_rank, world_size: int, args):
+    data_args, distill_args = args
 
-    runner = Runner(args)
-    runner.distill(args)
+    runner = Runner(data_args, distill_args)
+    runner.distill(distill_args, data_args)
 
 
 if __name__ == "__main__":
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--ckpt",
-        type=str,
-        default=None,
-    )
-    parser.add_argument(
-        "--data-dir",
-        type=str,
-        default=None,
-        help="Path to the dataset",
-    )
-    parser.add_argument(
-        "--data-factor",
-        type=int,
-        default=1,
-        help="Downsample factor for the dataset",
-    )
-    parser.add_argument(
-        "--test_every",
-        type=int,
-        default=1000,
-        help="Every N images there is a test image",
-    )
-    parser.add_argument(
-        "--feature-folder",
-        type=str,
-        default=None,
-        help="relative Path to the feature folder",
-    )
-    parser.add_argument(
-        "--mask-folder",
-        type=str,
-        default=None,
-        help="Path to the mask folder",
-    )
-    parser.add_argument(
-        "--filter",
-        type=bool,
-        default=False,
-        help="Filter the splats that is not in the center of the image",
-    )
-    parser.add_argument(
-        "--quantize",
-        type=str,
-        default="False",
-        help="Quantize the features to the prototypes",
-    )
-    parser.add_argument(
-        "--splat-method",
-        type=str,
-        default="3DGS",
-        help="The method to use for the splatting",
-        choices=["3DGS", "2DGS", "DBS"],
-    )
-    args = parser.parse_args()
-    cli(main, args, verbose=True)
+    data_args, distill_args = build_parser()
+    cli(main, (data_args, distill_args))
