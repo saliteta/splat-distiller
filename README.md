@@ -19,6 +19,7 @@ This project is built on top of the [gaussian-splatting](https://github.com/grap
     conda env create -f environment.yml
     conda activate splat-distiller
     pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0  --index-url https://download.pytorch.org/whl/cu128
+    conda install -c pytorch -c nvidia faiss-gpu -y
     pip install .
     ```
 

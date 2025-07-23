@@ -4,6 +4,7 @@ from .rasterization import (
     inverse_rasterization_dbs,
 )
 from .datasets.colmap import Parser, Dataset
+from .datasets.traj import *
 from .utils.primitives import *
 from .utils.renderer import *
 from .utils.text_encoder import *

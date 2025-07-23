@@ -150,7 +150,8 @@ class GaussianPrimitive(Primitive):
         self,
         file_path: Union[str, Path],
         feature_path: Optional[Union[str, Path]] = None,
-        transformed: bool = False,
+        tikhonov: Union[float, None] = None,
+        args: Optional[dict] = None,
     ) -> None:
         ckpt = torch.load(file_path, map_location="cuda")["splats"]
 

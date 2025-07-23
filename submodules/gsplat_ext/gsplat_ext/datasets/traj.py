@@ -252,3 +252,10 @@ def generate_interpolated_path(
         points, n_interp * (points.shape[0] - 1), k=spline_degree, s=smoothness
     )
     return points_to_poses(new_points)
+
+__all__ = [
+    "generate_spiral_path",
+    "generate_ellipse_path_z",
+    "generate_ellipse_path_y",
+    "generate_interpolated_path",
+]

@@ -16,9 +16,9 @@ class DataArgs:
 class DistillArgs:
     method: str
     ckpt: str
-    tikhonov: float
     filter: bool
     quantize: bool
+    tikhonov: float = 1
 
 @dataclass
 class RenderingArgs:
