@@ -156,7 +156,7 @@ def run_lerf_ovs_evaluation(args: DictConfig):
                 os.system(
                     f"python -W ignore eval.py --dir {scene} --result_folder {result_scene} --label_folder {label_path} \
                     --ckpt {ckpt} --text_encoder {args.feature_extraction.method} --feature_ckpt {feature_ckpt} \
-                    --result_type {args.evaluation.metrics} --method {args.training.splat_method}"
+                    --result_type {args.evaluation.metrics} --method {args.training.splat_method} --tikhonov {args.evaluation.tikhonov}"
                 )
             else:
                 raise ValueError(f"Invalid extension: {args.extension}")

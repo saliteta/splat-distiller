@@ -836,7 +836,7 @@ class LERFMetrics(Metrics):
         rendered_seg = _colorize_sparse_masks(
             segmentation_masks,  # your sparse (B,H,W)
             colors,  # RGBA colormap array
-            alpha=1,
+            alpha=0.5,
         )
 
         # GT segmentation mask (color)
