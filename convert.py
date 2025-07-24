@@ -47,7 +47,7 @@ if not args.skip_matching:
         + "/distorted/database.db \
         --image_path "
         + args.source_path
-        + "/input \
+        + "/images \
         --ImageReader.single_camera 1 \
         --ImageReader.camera_model "
         + args.camera
@@ -86,10 +86,10 @@ if not args.skip_matching:
         + "/distorted/database.db \
         --image_path "
         + args.source_path
-        + "/input \
+        + "/images \
         --output_path "
         + args.source_path
-        + "/distorted/sparse \
+        + "/sparse \
         --Mapper.ba_global_function_tolerance=0.000001"
     )
     exit_code = os.system(mapper_cmd)
@@ -104,13 +104,13 @@ img_undist_cmd = (
     + " image_undistorter \
     --image_path "
     + args.source_path
-    + "/input \
+    + "/images \
     --input_path "
     + args.source_path
-    + "/distorted/sparse/0 \
+    + "/sparse/0 \
     --output_path "
     + args.source_path
-    + "\
+    + "/images_undistorted\
     --output_type COLMAP"
 )
 exit_code = os.system(img_undist_cmd)

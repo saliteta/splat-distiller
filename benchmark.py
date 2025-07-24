@@ -35,9 +35,8 @@ def run_lerf_ovs_evaluation(args):
             result_scene = output_path / scene_name / args.splat_method
             if args.splat_method == "3DGS":
                 print(f"Running Gaussian Splatting for {scene_name}...")
-                os.system(
-                    f"python gaussian_splatting/simple_trainer.py default --data-dir {scene} --result_dir {result_scene} --data-factor 1 --disable_viewer --random-bkgd"
-                )
+                cmd_str = f"python gaussian_splatting/simple_trainer.py default --data-dir {scene} --result_dir {result_scene} --data-factor 1 --disable_viewer --random-bkgd"
+                os.system(cmd_str)
             elif args.splat_method == "2DGS":
                 print(f"Running 2D Gaussian Splatting for {scene_name}...")
                 os.system(
@@ -62,9 +61,8 @@ def run_lerf_ovs_evaluation(args):
             print(f"Lifting {scene}...")
             if args.splat_method == "3DGS":
                 ckpt = output_path / scene_name / args.splat_method / "ckpts" / "ckpt_29999_rank0.pt"
-                os.system(
-                    f"python gaussian_splatting/distill.py --data-dir {scene} --ckpt {ckpt}"
-                )
+                cmd = f"python gaussian_splatting/distill.py --data-dir {scene} --ckpt {ckpt}"
+                os.system(cmd)
             elif args.splat_method == "2DGS":
                 raise NotImplementedError("2DGS distillation is not implemented yet")
             elif args.splat_method == "DBS":
@@ -84,9 +82,8 @@ def run_lerf_ovs_evaluation(args):
             label_path = lerf_base_path / "label" / scene_name
             ckpt = output_path / scene_name / args.splat_method / "ckpts" / "ckpt_29999_rank0.pt"
             print(f"Evaluating {scene_name}...")
-            os.system(
-                f"python eval.py --data-dir {scene} --result-dir {result_scene} --label-dir {label_path} --ckpt {ckpt}"
-            )
+            cmd = f"python eval.py --data-dir {scene} --result-dir {result_scene} --label-dir {label_path} --ckpt {ckpt}"
+            os.system(cmd)
 
 
 if __name__ == "__main__":

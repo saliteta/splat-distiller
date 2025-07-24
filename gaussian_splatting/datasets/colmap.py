@@ -7,7 +7,7 @@ import imageio.v2 as imageio
 import numpy as np
 import torch
 from PIL import Image
-from pycolmap import SceneManager
+from colmap_loader import SceneManager
 from tqdm import tqdm
 from typing_extensions import assert_never
 
@@ -190,9 +190,10 @@ class Parser:
         # so we need to map between the two sorted lists of files.
         colmap_files = sorted(_get_rel_paths(colmap_image_dir))
         image_files = sorted(_get_rel_paths(image_dir))
-        if factor > 1 and os.path.splitext(image_files[0])[1].lower() == ".jpg":
+        if factor > 1 and os.path.splitext(colmap_files[0])[1].lower() == ".jpg":
+        #if factor > 1:
             image_dir = _resize_image_folder(
-                colmap_image_dir, image_dir + "_png", factor=factor
+                colmap_image_dir, image_dir, factor=factor
             )
             image_files = sorted(_get_rel_paths(image_dir))
         colmap_to_image = dict(zip(colmap_files, image_files))
