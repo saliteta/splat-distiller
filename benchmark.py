@@ -163,7 +163,7 @@ def run_lerf_ovs_evaluation(args: DictConfig):
             print(f"Evaluating {scene_name}...")
 
 
-@hydra.main(config_path="config", config_name="for_inria.yaml")
+@hydra.main(config_path="config", config_name="for_metrics.yaml")
 def main(args: DictConfig):
     run_lerf_ovs_evaluation(args)
 

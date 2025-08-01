@@ -124,7 +124,8 @@ To run feature extraction, model training, feature lifting, rendering, and evalu
 gdown 1QF1Po5p5DwTjFHu6tnTeYs_G0egMVmHt
 unzip lerf_ovs
 rm lerf_ovs.zip
-python benchmark.py --lerf_ovs lerf_ovs --output_path results
+##### Here You Need to modify the config.py file accordingly
+python benchmark.py --config ${Your config .yaml} # default is for_metrics.yaml in congif/
 ```
 The all the results should be in "results" folder
 The results seperated by the scene name, and it has:
