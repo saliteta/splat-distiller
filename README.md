@@ -164,12 +164,11 @@ examples: left one is when one visualize in relevance mode, input eggs, and the 
 
 
 ### Adapting LAGA format Feature Extraction
-LAGA and OpenGaussian and LangSplat all use the same way of feature extraction, it works better on at least Figurines in terms of metrics performance, however, it usually takes around 
-2 hours to process one scene. By utilizing their preprocessed feature, we can further bust our mIoU at the cost of time.
+LAGA and OpenGaussian and LangSplat all use about the same way of feature extraction, however, it usually takes around 
+2 hours to process one scene. By utilizing their preprocessed feature, we can further boost our mIoU at the cost of time.
 to use, simply do the following
 ```
 pip install git+https://github.com/facebookresearch/segment-anything.git
-pip install git+https://github.com/minghanqin/segment-anything-langsplat.git
 ```
 
 Then we can run:
