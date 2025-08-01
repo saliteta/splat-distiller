@@ -16,30 +16,32 @@ extension: None
 skip:
     feature_extraction: True
     training:        True
-    lifting:         True
+    lifting:         false
     evaluation:      false
 
 
 # Feature extraction settings
 
 feature_extraction:
-    method: "maskclip" # one of [maskclip, SAMOpenCLIP]
-    folder: "maskclip_features"
+    method: "resnet50" # one of [maskclip, vit, resnet50]
+    folder: "resnet50_features"
     sam_ckpt_path: 
 
 # Training settings
 training:
     splat_method: "3DGS"         # one of [3DGS, 2DGS, DBS]
-
+    max_steps: 60000
+    save_steps: 60000
 
 
 # Distillation settings
 distillation:
     quantize: False
-
+    tikhonov: 1.0
 
 
 # Evaluation settings
 evaluation:
     rendering_mode: "RGB+AttentionMap+VIS"
-    metrics: "attention_map"
+    metrics: "feature_map"
+    tikhonov: 1.0

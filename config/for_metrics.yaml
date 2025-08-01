@@ -34,15 +34,15 @@ training:
     save_steps: 60000
 
 
-
 # Distillation settings
 distillation:
-    quantize: False
-    
+    quantize: True
+    tikhonov: 1.2
 
 
 
 # Evaluation settings
 evaluation:
-    rendering_mode: "RGB+AttentionMap+VIS" # RGB+FeatureMap+pcaFeatureMap
-    metrics: "attention_map" # attention_map
+    rendering_mode: "RGB+AttentionMap+VIS"
+    metrics: "attention_map"
+    tikhonov: 1.2

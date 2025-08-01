@@ -37,7 +37,8 @@ training:
 
 # Distillation settings
 distillation:
-    quantize: False
+    quantize: True
+    tikhonov: 1.2
 
 
 
@@ -45,3 +46,4 @@ distillation:
 evaluation:
     rendering_mode: "RGB+AttentionMap+VIS"
     metrics: "attention_map"
+    tikhonov: 1.2

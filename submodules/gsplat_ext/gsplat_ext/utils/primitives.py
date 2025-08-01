@@ -150,7 +150,8 @@ class GaussianPrimitive(Primitive):
         self,
         file_path: Union[str, Path],
         feature_path: Optional[Union[str, Path]] = None,
-        transformed: bool = False,
+        tikhonov: Union[float, None] = None,
+        args: Optional[dict] = None
     ) -> None:
         ckpt = torch.load(file_path, map_location="cuda")["splats"]
 
@@ -200,7 +201,7 @@ class GaussianPrimitive(Primitive):
             self._feature = None
         print("Number of Gaussians:", len(means))
 
-    def _load_ply(self, path, use_train_test_exp = False, tikhonov: Union[float, None] = None, args: Optional[dict] = None):
+    def _load_ply(self, path, tikhonov: Union[float, None] = None, args: Optional[dict] = None):
         plydata = PlyData.read(path)
 
         xyz = np.stack((np.asarray(plydata.elements[0]["x"]),

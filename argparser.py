@@ -71,7 +71,7 @@ def build_rendering_parser() -> Tuple[RenderingArgs, MetricsArgs]:
     rendering_args.add_argument("--result_type", type=str, default="attention_map", help="Result type to use, default is attention_map", choices=["attention_map", "feature_map", "drsplat"])
     rendering_args.add_argument("--ckpt", type=str, default=None, help="Path to the checkpoint")
     rendering_args.add_argument("--feature_ckpt", type=str, default=None, help="Path to the feature checkpoint, default is the same as the ckpt but with _features.pt")
-    rendering_args.add_argument("--text_encoder", type=str, default="maskclip", help="Text encoder to use, default is maskclip", choices=["maskclip", "SAM2OpenCLIP", "SAMOpenCLIP"])
+    rendering_args.add_argument("--text_encoder", type=str, default="maskclip", help="Text encoder to use, default is maskclip", choices=["maskclip", "SAM2OpenCLIP", "SAMOpenCLIP", "dino16", "dinov2", "clip", "vit", "resnet50"])
     rendering_args.add_argument("--faiss_index_path", type=str, default=None, help="Path to the faiss index, only for drsplat")
     rendering_args.add_argument("--method", type=str, default="3DGS", help="Splat method to use, default is 3DGS", choices=["3DGS", "2DGS", "DBS", "drsplat"])
     rendering_args.add_argument("--tikhonov", type=float, default=None, help="Tikhonov regularization parameter")

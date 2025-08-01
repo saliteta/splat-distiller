@@ -40,6 +40,9 @@ class TextEncoder:
             self.model.to(device)
             self.model.eval()
             self.tokenizer = open_clip.get_tokenizer("ViT-B-16")
+        elif model_name in ["dino16", "dinov2", "clip", "vit", "resnet50"]:
+            print(f"Model {model_name} is not text_model, it can only be used for PSNR and consine similarity comparison")
+            print("will return None, not suitable for attention map")
         else:
             raise ValueError(f"Model {model_name} not supported")
 
@@ -50,6 +53,8 @@ class TextEncoder:
             features = self.model.encode_text(self.tokenizer(text).cuda())[:, :512]
         elif self.model_name == "SAMOpenCLIP":
             features = self.model.encode_text(self.tokenizer(text).cuda())[:, :512]
+        elif self.model_name in ["dino16", "dinov2", "clip", "vit", "resnet50"]:
+            features = None
         else:
             raise ValueError(f"Model {self.model_name} not supported")
         return self.quantize_text(features)

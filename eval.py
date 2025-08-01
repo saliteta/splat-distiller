@@ -16,9 +16,10 @@ from gsplat_ext import (
 )
 from evaluator_loader import lerf_evaluator
 from metrics import LERFMetrics
-from gsplat_ext import TextEncoder
+from gsplat_ext import TextEncoder, load_image_features
 import torch
 from argparser import build_rendering_parser, RenderingArgs, MetricsArgs
+from tqdm import tqdm
 
 
 
@@ -64,7 +65,6 @@ def load_evaluator(rendering_args: RenderingArgs, metrics_args: MetricsArgs):
 
     return evaluator
 
-
 def main():
     rendering_args, metrics_args = build_rendering_parser()
     # Load data
@@ -78,13 +78,33 @@ def main():
         raise ValueError(f"Invalid metrics: {rendering_args.result_type}")
     evaluator = load_evaluator(rendering_args, metrics_args)
     evaluator.eval(Path(metrics_args.result_folder), modes=modes, feature_saving_mode="pt")
+    
+    """
+    if The result_type is feature_map, we need to move the gt_feature_map some where,
+    we decide to move the gt feature map from the generated feature to the label folder,
+    The folder name is the model name, for example, SAMOpenCLIP, SAM2OpenCLIP, maskclip, etc.
+
+    """
+    if rendering_args.result_type == "feature_map":
+        label_folder = Path(metrics_args.label_folder)
+        label_feature_folder = Path(label_folder)/ rendering_args.text_encoder
+        label_feature_folder.mkdir(parents=True, exist_ok=True)
+        image_folder = Path(rendering_args.dir)/'images'
+        for item in tqdm(evaluator.camera_dataloader, desc="For Feature Comparison Only"):
+            image_path = image_folder/Path(item['image_name'][0])
+            feature = load_image_features(image_path, rendering_args.text_encoder+'_features')[:, :, :512]
+            torch.save(feature, label_feature_folder / (image_path.stem+'.pt'))
+            del feature
+            torch.cuda.empty_cache()
+
     metrics = LERFMetrics(
         label_folder=Path(metrics_args.label_folder),
         rendered_folder=Path(metrics_args.result_folder),
         text_encoder=rendering_args.text_encoder,
         enable_pca=None,
+        feature_folder=label_feature_folder if rendering_args.result_type == "feature_map" else None,
     )
-    metrics.compute_metrics(save_path=Path(metrics_args.result_folder), mode=rendering_args.result_type)
+    metrics.compute_metrics(save_path=Path(metrics_args.result_folder), mode=rendering_args.result_type, feature_folder=label_feature_folder if rendering_args.result_type == "feature_map" else None)
 
 
 if __name__ == "__main__":

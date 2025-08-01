@@ -14,9 +14,10 @@
 """
 
 from pathlib import Path
-from typing import List, Dict, Any, Tuple, Literal
+from typing import List, Dict, Any, Tuple, Literal, Union
 from abc import ABC, abstractmethod
 import json
+from sklearn.decomposition import PCA
 import torch
 import cv2
 import numpy as np
@@ -26,9 +27,7 @@ import pandas as pd
 from tqdm import tqdm
 from PIL import Image
 from gsplat_ext import TextEncoder
-from sklearn.decomposition import PCA
 import torch.nn.functional as F
-import math
 from evaluator_loader import BACKGROUND_WORDS
 from scipy import ndimage
 import numpy as np
@@ -36,13 +35,13 @@ import numpy as np
 
 
 class Metrics(ABC):
-    def __init__(self, label_folder: Path, rendered_folder: Path):
+    def __init__(self, label_folder: Path, rendered_folder: Path, feature_folder: Union[Path, None] = None):
         self.label_folder = label_folder
         self.rendered_folder = rendered_folder
-        self.labels = self.load_labels()
+        self.labels = self.load_labels(feature_folder)
 
     @abstractmethod
-    def load_labels(self) -> Dict[str, Any]:
+    def load_labels(self, feature_folder: Union[Path, None] = None) -> Dict[str, Any]:
         """
         Load the labels from the json file
         """
@@ -64,15 +63,16 @@ class LERFMetrics(Metrics):
         text_encoder: Literal["maskclip", "SAM2OpenCLIP", "SAMOpenCLIP"],
         enable_pca: int | None = None,
         instance_segmentation: bool = True,
+        feature_folder: Union[Path, None] = None,
     ):
-        super().__init__(label_folder, rendered_folder)
-        self.text_encoder = TextEncoder(text_encoder, torch.device("cuda"))
+        super().__init__(label_folder, rendered_folder, feature_folder)
+        #self.text_encoder = TextEncoder(text_encoder, torch.device("cuda"))
         self.background_text = BACKGROUND_WORDS
         self.enable_pca = enable_pca
         self.position_embedding_weight = 0.001
         self.instance_segmentation = True
 
-    def load_labels(self) -> Dict[str, Any]:
+    def load_labels(self, feature_folder: Union[Path, None] = None) -> Dict[str, Any]:
         """
         Load the labels from the json file
         """
@@ -98,6 +98,13 @@ class LERFMetrics(Metrics):
             if basename in metadata:
                 metadata[basename]["image"] = str(image_file)
 
+        if feature_folder is not None:
+            feature_files = [f for f in feature_folder.iterdir() if str(f).endswith(".pt")]
+            for feature_file in feature_files:
+                basename = Path(feature_file).stem
+                if basename in metadata:
+                    metadata[basename]["feature"] = str(feature_file)
+
         # Convert metadata to list of dictionaries
         result = {}
         for basename, data in metadata.items():
@@ -105,12 +112,13 @@ class LERFMetrics(Metrics):
                 result[basename] = {
                     "json_path": data["json"],
                     "image_path": data["image"],
+                    "feature_path": data["feature"] if feature_folder is not None else None
                 }
 
         return result
 
     def compute_metrics(
-        self, save_path: Path, mode: Literal["feature_map", "attention_map"]
+        self, save_path: Path, mode: Literal["feature_map", "attention_map"], feature_folder: Union[Path, None] = None
     ) -> Dict[str, Any]:
         """
         Compute the metrics
@@ -119,6 +127,10 @@ class LERFMetrics(Metrics):
         frame_names = []
         frame_metrics_list = []
 
+
+        if mode == "feature_map":
+            assert feature_folder is not None, "feature_folder is required for feature_map"
+        
         save_path.mkdir(parents=True, exist_ok=True)
         save_path_metrics_images = save_path / "metrics_images"
         save_path_metrics_images.mkdir(parents=True, exist_ok=True)
@@ -129,6 +141,11 @@ class LERFMetrics(Metrics):
             gt_image = cv2.imread(str(gt_image_path))
             gt_image = cv2.cvtColor(gt_image, cv2.COLOR_BGR2RGB)
             gt_image = torch.tensor(gt_image)
+            if mode == "feature_map":
+                gt_feature = torch.load(self.labels[frame]["feature_path"])
+                gt_feature = gt_feature.to("cuda")
+            else:
+                gt_feature = None
             gt_masks_tensor, unique_categories = self.json_parser(json_path)
 
             # Get basename without extension
@@ -160,22 +177,33 @@ class LERFMetrics(Metrics):
             rendered_feature = torch.load(str(feature_path)).cuda()
 
             feature_metrics = self.feature_metrics(
-                rendered_feature, gt_masks_tensor, unique_categories, mode
+                rendered_feature, gt_feature if mode == "feature_map" else gt_masks_tensor, unique_categories, mode
             )
+            if mode == "feature_map":
+                gt_masks_tensor = feature_metrics["gt_feature"].to("cuda")
             image_metrics = self.image_metrics(rendered_image, gt_image)
 
             # Store only the per-frame metrics
             frame_names.append(basename)
-            frame_metrics_list.append(
-                {
-                    "mIoU": float(feature_metrics["mIoU"]),
-                    "mAcc": float(feature_metrics["mAcc"]),
-                    "SSIM": float(image_metrics["ssim"]),
-                    "PSNR": float(image_metrics["psnr"]),
+            if mode == "feature_map":
+                frame_metrics = {
+                    "cosine_similarity": float(feature_metrics["cosine_similarity"]),
+                    "ssim": float(image_metrics["ssim"]),
+                    "psnr": float(image_metrics["psnr"]),
                 }
+            else:
+                frame_metrics = {
+                    "mIoU": feature_metrics["mIoU"],
+                    "mAcc": feature_metrics["mAcc"],
+                    "ssim": float(image_metrics["ssim"]),
+                    "psnr": float(image_metrics["psnr"]),
+                }
+            frame_metrics_list.append(
+                frame_metrics
             )
 
             metrics_images = self.visualize_metrics(
+                mode,
                 feature_metrics,
                 rendered_image,
                 gt_masks_tensor,
@@ -306,10 +334,12 @@ class LERFMetrics(Metrics):
         """
         unique_categories_str = [cat for cat, _ in unique_categories]
         if mode == "feature_map":
-            predicted_labels, attention_scores = self.feature_map2labels(
-                rendered_feature, unique_categories_str
+            cosine_similarity, rendered_feature, masks_tensor = self.compute_cosine_similarity_map(
+                rendered_feature, masks_tensor
             )
             H, W, _ = rendered_feature.shape
+            metrics = {"cosine_similarity": cosine_similarity, "feature_map": rendered_feature, "gt_feature": masks_tensor}
+            return metrics
         elif mode == "attention_map":
             predicted_labels, attention_scores = self.attention_map2auto_threshold(
                 rendered_feature, unique_categories
@@ -330,7 +360,7 @@ class LERFMetrics(Metrics):
         num_classes = len(unique_categories)
         max_coords = []
         for cls in range(num_classes):
-            class_attention = attention_scores[:, cls]  # (H*W,)
+            class_attention = attention_scores[..., cls].reshape(-1)  # (H*W,)
             # Get the top_n indices for the current class (sorted in descending order)
             topk = torch.topk(class_attention, k=1, sorted=True)
             coords = []
@@ -382,33 +412,34 @@ class LERFMetrics(Metrics):
 
         return masks, attn_scores
 
-    def feature_map2labels(
-        self, feature_map: torch.Tensor, texts: List[str]
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    def compute_cosine_similarity_map(
+        self, feature_map: torch.Tensor, gt_feature_map: torch.Tensor
+    ) -> Tuple[float, torch.Tensor, torch.Tensor]:
         """
-        Convert the feature map to labels, as well as the attention scores
-        feature_map: (H, W, C)
-        texts: (B, ) List[str]
-        return: (B, H, W) torch.Tensor dense segmentation masks, (B,) torch.Tensor attention scores
+        Compute mean cosine similarity between the feature map and the ground truth feature map.
+        Assumes both feature_map and gt_feature_map are of shape (H, W, C) and L2-normalized.
+        Returns: mean_cosine_sim, feature_map, gt_feature_map
         """
-        texts_query = texts + self.background_text
-        text_features = self.text_encoder.encode_text(texts_query).float().squeeze()
-        attention_scores = self.compute_attention_with_positional_embedding(
-            feature_map, text_features
-        )
+        # L2 normalization
+        
+        # Interpolate feature_map to match gt_feature_map's height and width
+        if feature_map.shape[:2] != gt_feature_map.shape[:2]:
+            feature_map = feature_map.permute(2, 0, 1).unsqueeze(0)  # (1, C, H, W)
+            feature_map = torch.nn.functional.interpolate(
+                feature_map,
+                size=gt_feature_map.shape[:2],
+                mode="bilinear",
+                align_corners=False,
+            )
+            feature_map = feature_map.squeeze(0).permute(1, 2, 0)  # (H, W, C)
+        feature_map = F.normalize(feature_map, p=2, dim=-1)
+        gt_feature_map = F.normalize(gt_feature_map, p=2, dim=-1)
 
-        predicted_labels = torch.argmax(
-            attention_scores, dim=-1
-        )  # Get highest similarity category index
+        # Cosine similarity: dot product between unit vectors
+        cos_sim_map = torch.sum(feature_map * gt_feature_map, dim=-1)  # shape (H, W)
+        mean_cos_sim = torch.mean(cos_sim_map)  # scalar
 
-        num_classes = int(predicted_labels.max().item()) + 1
-        # one_hot: (H, W, B)
-        one_hot = F.one_hot(predicted_labels, num_classes=num_classes)
-
-        # reorder to (B, H, W)
-        one_hot = one_hot.permute(2, 0, 1).contiguous()
-
-        return one_hot[: len(texts)], attention_scores
+        return mean_cos_sim.item(), feature_map, gt_feature_map
 
     @torch.no_grad()
     def attention_map2auto_threshold(
@@ -799,6 +830,7 @@ class LERFMetrics(Metrics):
 
     def visualize_metrics(
         self,
+        mode: Literal["feature_map", "attention_map"],
         metrics: Dict[str, Any],
         rendered_image: torch.Tensor,
         masks_tensor: torch.Tensor,
@@ -810,9 +842,90 @@ class LERFMetrics(Metrics):
         [Rendered image | GT image]
         [Rendered segmentation | GT segmentation]
         """
-        segmentation_masks = metrics[
-            "segmentation_masks"
-        ]  # Notice that the shape is (B, H, W), sparse mask
+
+        if mode == 'attention_map':
+            segmentation_masks = metrics[
+                "segmentation_masks"
+            ]  # Notice that the shape is (B, H, W), sparse mask
+            result = self.visualize_masks(unique_category_text, segmentation_masks, rendered_image, ground_truth_image, masks_tensor)
+        elif mode == 'feature_map':
+            gt_feature = masks_tensor
+            pred_feature = metrics["feature_map"]
+            result = self.visualize_feature_map(pred_feature, gt_feature, rendered_image, ground_truth_image)
+
+
+        return result
+
+
+    def plot_images(self, rendered_image: torch.Tensor, 
+    gt_image: torch.Tensor, 
+    pca_or_seg: np.ndarray, 
+    gt_pca_or_seg: np.ndarray, 
+    mode: Literal["attention_map", "feature_map"], 
+    unique_category_text: Union[List[str], None] = None,
+    colors: Union[np.ndarray, None] = None
+    ) -> torch.Tensor:
+
+        """
+        Plot the images
+        """
+  
+        rendered_np = rendered_image.cpu().numpy()
+        gt_np = gt_image
+        rendered_seg = pca_or_seg
+        gt_seg = gt_pca_or_seg
+
+        fig, axs = plt.subplots(2, 2, figsize=(12, 12))
+        axs[0, 0].imshow(rendered_np)
+        axs[0, 0].set_title("Rendered Image")
+        axs[0, 0].axis("off")
+
+        axs[0, 1].imshow(gt_np)
+        axs[0, 1].set_title("Ground Truth Image")
+        axs[0, 1].axis("off")
+
+        axs[1, 0].imshow(rendered_seg)
+        axs[1, 0].set_title("Rendered Segmentation" if mode == "attention_map" else "Rendered Feature PCA")
+        axs[1, 0].axis("off")
+
+        axs[1, 1].imshow(gt_seg)
+        axs[1, 1].set_title("Ground Truth Segmentation" if mode == "attention_map" else "Ground Truth Feature PCA")
+        axs[1, 1].axis("off")
+
+        from matplotlib.patches import Patch
+        if unique_category_text is not None:
+            num_classes = len(unique_category_text)
+
+            legend_patches = [
+                Patch(color=colors[i][:3], label=unique_category_text[i])
+                for i in range(num_classes)
+            ]
+            fig.legend(
+                handles=legend_patches,
+                loc="lower center",
+                ncol=4,
+                frameon=True,
+                fontsize=10,
+            )
+    
+            plt.tight_layout()
+            plt.subplots_adjust(bottom=0.15)
+    
+        # Save to temporary file and convert to tensor
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+            plt.savefig(tmp.name, bbox_inches="tight", pad_inches=0)
+            plt.close(fig)
+            saved_img = Image.open(tmp.name).convert("RGB")
+            result = torch.tensor(np.array(saved_img)).float()
+        return result
+
+
+
+
+    def visualize_masks(self, unique_category_text: List[str], segmentation_masks: torch.Tensor, rendered_image: torch.Tensor, ground_truth_image: torch.Tensor, masks_tensor: torch.Tensor) -> torch.Tensor:
+
         B, H, W = segmentation_masks.shape
         num_classes = len(unique_category_text)
         cmap = plt.cm.get_cmap("tab20", num_classes)
@@ -836,61 +949,68 @@ class LERFMetrics(Metrics):
         rendered_seg = _colorize_sparse_masks(
             segmentation_masks,  # your sparse (B,H,W)
             colors,  # RGBA colormap array
-            alpha=0.5,
+            alpha=1.0,
         )
 
-        # GT segmentation mask (color)
+                # GT segmentation mask (color)
         gt_seg = np.zeros((H, W, 3), dtype=np.uint8)
         for i in range(masks_tensor.shape[0]):
             mask = masks_tensor[i].cpu().numpy()
             gt_seg[mask == 1] = (colors[i][:3] * 255).astype(np.uint8)
 
-        # Plot
-        fig, axs = plt.subplots(2, 2, figsize=(12, 12))
-        axs[0, 0].imshow(rendered_np)
-        axs[0, 0].set_title("Rendered Image")
-        axs[0, 0].axis("off")
-
-        axs[0, 1].imshow(gt_np)
-        axs[0, 1].set_title("Ground Truth Image")
-        axs[0, 1].axis("off")
-
-        axs[1, 0].imshow(rendered_seg)
-        axs[1, 0].set_title("Rendered Segmentation")
-        axs[1, 0].axis("off")
-
-        axs[1, 1].imshow(gt_seg)
-        axs[1, 1].set_title("Ground Truth Segmentation")
-        axs[1, 1].axis("off")
-
-        # Add legend below
-        from matplotlib.patches import Patch
-
-        legend_patches = [
-            Patch(color=colors[i][:3], label=unique_category_text[i])
-            for i in range(num_classes)
-        ]
-        fig.legend(
-            handles=legend_patches,
-            loc="lower center",
-            ncol=4,
-            frameon=True,
-            fontsize=10,
+        return self.plot_images(
+            rendered_image=rendered_image,
+            gt_image=ground_truth_image,
+            pca_or_seg=rendered_seg,
+            gt_pca_or_seg=gt_seg,
+            mode="attention_map",
+            unique_category_text=unique_category_text,
+            colors=colors,
         )
 
-        plt.tight_layout()
-        plt.subplots_adjust(bottom=0.15)
+    def visualize_feature_map(self, feature_map: torch.Tensor, gt_feature: torch.Tensor, rendered_image: torch.Tensor, ground_truth_image: torch.Tensor) -> torch.Tensor:
+        """
+        Visualize the feature map
+        """
 
-        # Save to temporary file and convert to tensor
-        import tempfile
+        # Use the same PCA fit on the concatenation of both feature maps, then transform each separately
 
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-            plt.savefig(tmp.name, bbox_inches="tight", pad_inches=0)
-            plt.close(fig)
-            saved_img = Image.open(tmp.name).convert("RGB")
-            result = torch.tensor(np.array(saved_img)).float()
+        # Prepare both feature maps for PCA
+        h1, w1, c1 = feature_map.shape
+        h2, w2, c2 = gt_feature.shape
+        assert c1 == c2, "Feature channel dimensions must match"
 
-        return result
+        feature_map_flat = feature_map.reshape(-1, c1)
+        gt_feature_flat = gt_feature.reshape(-1, c2)
+
+        # Fit PCA on the concatenated features
+        concat_features = torch.cat([feature_map_flat, gt_feature_flat], dim=0).cpu().numpy()
+        pca = PCA(n_components=3)
+        pca.fit(concat_features)
+
+        # Transform each feature map using the same PCA
+        feature_pca = pca.transform(feature_map_flat.cpu().numpy()).reshape(h1, w1, 3)
+        gt_feature_pca = pca.transform(gt_feature_flat.cpu().numpy()).reshape(h2, w2, 3)
+
+        # Normalize each channel independently for both maps
+        for arr in [feature_pca, gt_feature_pca]:
+            for i in range(3):
+                min_val = arr[..., i].min()
+                max_val = arr[..., i].max()
+                if max_val > min_val:
+                    arr[..., i] = (arr[..., i] - min_val) / (max_val - min_val)
+                else:
+                    arr[..., i] = 0.0
+            np.clip(arr, 0.0, 1.0, out=arr)
+
+        return self.plot_images(
+            rendered_image=rendered_image,
+            gt_image=ground_truth_image,
+            pca_or_seg=feature_pca,
+            gt_pca_or_seg=gt_feature_pca,
+            mode="feature_map",
+        )
+
 
 
 def _colorize_sparse_masks(

@@ -1,10 +1,8 @@
-from dataclasses import dataclass
 from nerfview import apply_float_colormap
 import torch
 from gsplat_ext import Dataset, Parser
 from gaussian_splatting.utils import set_random_seed
 from gsplat.distributed import cli
-import argparse
 import os
 from tqdm import tqdm
 import torch.nn.functional as F
@@ -137,7 +135,9 @@ class Runner:
         means = self.splats.geometry["means"]
         # we can deal with 2DGS and 3DGS differently
 
-        feature_dim = self.trainLoader.dataset[0]["features"].shape[-1]
+        feature_dim = self.trainLoader.dataset[0]["features"].shape[-1] 
+        if feature_dim > 512:
+            feature_dim = 512
         self.splat_features = torch.zeros(
             (means.shape[0], feature_dim), dtype=torch.float32, device=self.device
         )
@@ -155,7 +155,14 @@ class Runner:
             pixels = data["image"].to(self.device) / 255.0
             height, width = pixels.shape[1:3]
             features = data["features"].to(self.device)
-
+            # Pad features to 512 channels if needed
+            if features.shape[-1] < 512:
+                pad_width = 512 - features.shape[-1]
+                pad_shape = list(features.shape[:-1]) + [pad_width]
+                pad_tensor = torch.zeros(pad_shape, dtype=features.dtype, device=features.device)
+                features = torch.cat([features, pad_tensor], dim=-1)
+            if features.shape[-1] > 512:
+                features = features[:, :, :, :512]
             # Permute features from [B, H, W, C] to [B, C, H, W]
             features = features.permute(0, 3, 1, 2)
             # Interpolate features to match the size of pixels (height, width)
@@ -181,7 +188,7 @@ class Runner:
                 features=features,
             )
 
-            self.splat_features[ids] += splat_features_per_image
+            self.splat_features[ids] += splat_features_per_image[:, :feature_dim]
             self.splat_weights[ids] += splat_weights_per_image
             del splat_features_per_image, splat_weights_per_image, ids, features
             torch.cuda.empty_cache()
