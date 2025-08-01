@@ -2,42 +2,44 @@
 
 ## Quickstart
 
-This project is built on top of the [gaussian-splatting](https://github.com/graphdeco-inria/gaussian-splatting), [gsplat](https://github.com/nerfstudio-project/gsplat), [beta-splatting](https://github.com/RongLiu-Leo/beta-splatting), and [Featup](https://github.com/mhamilton723/FeatUp) code bases. The authors are grateful to the original authors for their open-source codebase contributions.
+This project is built on top of the [gaussian-splatting](https://github.com/graphdeco-inria/gaussian-splatting), [gsplat](https://github.com/nerfstudio-project/gsplat), [beta-splatting](https://github.com/RongLiu-Leo/beta-splatting), [LAGA](https://github.com/SJTU-DeepVisionLab/LaGa)and [Featup](https://github.com/mhamilton723/FeatUp) code bases. The authors are grateful to the original authors for their open-source codebase contributions.
 
 ### Installation Steps
 
-0.**Set Up the Conda Environment:**
-    ```sh
-    conda create -y -n splat_distiller python=3.10
-    conda activate splat_distiller
-    ```
 
-1. **Clone the Repository:**
+0. **Clone the Repository:**
    ```sh
    git clone --single-branch --branch main https://github.com/saliteta/splat-distiller.git
    cd splat-distiller
    ```
-1. **Set Up the Compiler (NVCC & GCC | MSVC)**
-    ```sh
-    conda install -c nvidia/label/cuda-11.8.0 cuda-toolkit
-    # on linux make sure we are using gcc 11.x, you can install compilers through conda-forge
-    # on windows it seems like the nvcc is based on micorsoft visual compiler, you need to set it to msvc 2019
-    # You might manually set the path like the following
-    set PATH=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\${The version u use}\bin\Hostx64\x64\;%PATH%
-    ```
 
-1. **Install [Pytorch](https://pytorch.org/get-started/locally/) (Based on Your CUDA Version)**
+1. **Set Up the Conda Environment:**
+  Notice that if you can do this, you usally on a linux machine, otherwise check 
     ```sh
-    pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-    ```
-1. **Install Dependencies and Submodules:**
-    ```sh
+    conda env create -f environment.yml
+    conda activate splat-distiller
+    pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0  --index-url https://download.pytorch.org/whl/cu128
+    conda install -c pytorch -c nvidia faiss-gpu -y
     pip install .
     ```
 
 
-### Processing your own Scenes
+2. **Set Up the Compiler (GCC | MSVC)** (Optional, if no error in 1, skip this)
+    ```sh
+    # on linux make sure install compiler on the conda env, you can install compilers manually through conda-forge
+    # on windows it seems like the nvcc is based on micorsoft visual compiler, you need to set it to msvc 2022 or the one fit nvcc
+    # You might manually set the path like the following
+    set PATH=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\${The version u use}\bin\Hostx64\x64\;%PATH%
+    ```
 
+3. **Set Up SAM** (Optional, if you want to use SAM OpenCLIP model)
+    ```sh
+      wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth
+    ```
+
+
+### Processing your own Scenes 
+- If just want to reproduce the result in paper, skip this part
 The project expect the following dataset structure in the source path location:
 
 ```
@@ -90,10 +92,11 @@ python convert.py -s <location>
 </details>
 <br>
 
-#### 2. Extract features via FeatUp
 
+
+#### 2. Extract features via FeatUp
 ```shell
-python feature_extractor.py -s <location> --model <model>
+python feature_extractor.py -s <location> --model <model> --sam_ckpt_path <if use SAMOpenCLIP>
 ```
 
 <details>
@@ -102,7 +105,9 @@ python feature_extractor.py -s <location> --model <model>
   #### --source_path / -s
   Location of the inputs.
   #### --model 
-  Select the 2D foundation model from the list: dino16, dinov2, clip, maskclip, vit, resnet50.
+  Select the 2D foundation model from the list: dino16, dinov2, clip, maskclip, vit, resnet50, SAMOpenCLIP(paper metrics).
+
+  #### --sam_ckpt_path (optional, if you use sam open clip)
 </details>
 <br>
 
