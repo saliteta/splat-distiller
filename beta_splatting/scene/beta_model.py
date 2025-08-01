@@ -114,6 +114,22 @@ class BetaModel:
         self.training_setup(training_args)
         self.optimizer.load_state_dict(opt_dict)
 
+    def load_ckpt(self, path):
+        ckpt = torch.load(path, map_location="cuda")["splats"]
+        self._xyz = ckpt["means"]
+        self._sh0 = ckpt["sh0"]
+        self._sb_params = ckpt["sb_params"]
+        self._scaling = ckpt["scaling"]
+        self._rotation = ckpt["rotation"]
+        self._opacity = ckpt["opacity"]
+        self._beta = ckpt["beta"]
+        self.active_sh_degree = 0
+        self.sb_number = 2
+        self.max_sh_degree = 0
+        self.spatial_lr_scale = 0
+        self.optimizer = None
+        self.setup_functions()
+
     @property
     def get_scaling(self):
         return self.scaling_activation(self._scaling)
@@ -868,7 +884,6 @@ class BetaModel:
         self.background = (
             torch.tensor(render_tab_state.backgrounds, device="cuda") / 255.0
         )
-
         render_colors, alphas, meta = rasterization(
             means=self.get_xyz[mask],
             quats=self.get_rotation[mask],
@@ -886,7 +901,7 @@ class BetaModel:
             sh_degree=self.active_sh_degree,
             sb_number=self.sb_number,
             sb_params=self.get_sb_params[mask],
-            packed=False,
+            packed=True,
             near_plane=render_tab_state.near_plane,
             far_plane=render_tab_state.far_plane,
             radius_clip=render_tab_state.radius_clip,
@@ -901,3 +916,17 @@ class BetaModel:
             render_colors = apply_depth_colormap(render_colors)
 
         return render_colors[0].cpu().numpy()
+
+
+"""
+dirs.shape torch.Size([1, 1000000, 3])
+c0.shape torch.Size([1, 1000000, 3])
+coeffs.shape torch.Size([1, 1000000, 2, 6])
+masks.shape torch.Size([1, 1000000])
+
+
+dirs.shape torch.Size([796226, 3])
+c0.shape torch.Size([796226, 3])
+coeffs.shape torch.Size([1, 1000000, 2, 6])
+masks.shape torch.Size([796226])
+"""

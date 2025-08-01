@@ -97,5 +97,18 @@ reverse_rasterize_to_gaussians_2dgs(
 );
 
 
-} // namespace gsplat_ext
+std::tuple<torch::Tensor, torch::Tensor>
+reverse_rasterize_to_gaussians_dbs(
+    const at::Tensor &means2d,
+    const at::Tensor &conics,
+    const at::Tensor &opacities,
+    const at::Tensor &betas,
+    const at::Tensor &rendered_colors,
+    uint32_t          image_width,
+    uint32_t          image_height,
+    uint32_t          tile_size,
+    const at::Tensor &tile_offsets,
+    const at::Tensor &flatten_ids
+);
 
+} // namespace gsplat_ext

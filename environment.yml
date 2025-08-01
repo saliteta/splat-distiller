@@ -1,0 +1,11 @@
+name: splat-distiller
+channels:
+  - nvidia/label/cuda-12.8.0
+  - rapidsai-nightly
+  - conda-forge
+dependencies:
+  - python=3.10
+  - rapids=25.08
+  - cuda-toolkit
+  - compilers
+

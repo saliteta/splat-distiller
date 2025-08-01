@@ -13,6 +13,8 @@ def viewing(args):
         beta_model.load_ply(args.ply)
     elif args.png:
         beta_model.load_png(args.png)
+    elif args.ckpt:
+        beta_model.load_ckpt(args.ckpt)
     else:
         raise ValueError("You must provide either a .ply file or a .png folder")
     bg_color = [1, 1, 1] if args.white_background else [0, 0, 0]
