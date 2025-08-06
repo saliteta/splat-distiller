@@ -54,7 +54,7 @@ class MeshDistiller:
         print("Scene scale:", self.scene_scale)
 
     def _load_mesh(self, mesh_path):
-        loaded_mesh = trimesh.load(mesh_path)
+        loaded_mesh = trimesh.load(mesh_path, process=False)
         if isinstance(loaded_mesh, trimesh.Scene):
             # Extract the first mesh from the scene
             if len(loaded_mesh.geometry) == 0:
@@ -81,26 +81,27 @@ class MeshDistiller:
         #version 330 core
         
         in vec3 in_position;
-        flat out int face_id;
+        //flat out int face_id;
         
         uniform mat4 mvp;
-        uniform int base_face_id;
+        
         
         void main() {
             gl_Position = mvp * vec4(in_position, 1.0);
-            face_id = base_face_id + (gl_VertexID / 3);
+            //face_id = base_face_id + (gl_VertexID / 3);
         }
         '''
         
         face_id_fragment_shader = '''
-        #version 330 core
-        
-        flat in int face_id;
+        #version 330 core        
+        //flat in int face_id;
         out vec4 color;
+        uniform int base_face_id;
         
         void main() {
             // Encode face_id into RGB channels for more range
             // This allows up to 16M faces (24-bit encoding)
+            int face_id = gl_PrimitiveID + base_face_id;
             int r = (face_id >> 16) & 0xFF;
             int g = (face_id >> 8) & 0xFF;
             int b = face_id & 0xFF;
@@ -183,9 +184,11 @@ class MeshDistiller:
         Returns a tensor of shape [height, width] with face IDs.
         """
         # Create framebuffer
+        color_texture = self.ctx.texture((width, height), 4)
+        depth_texture = self.ctx.depth_texture((width, height))
         fbo = self.ctx.framebuffer(
-            color_attachments=[self.ctx.texture((width, height), 4)],
-            depth_attachment=self.ctx.depth_texture((width, height))
+            color_attachments=[color_texture],
+            depth_attachment=depth_texture
         )
         
         # Convert matrices to numpy
@@ -281,7 +284,12 @@ class MeshDistiller:
             # Return dummy face IDs for debug mode
             face_ids = np.zeros((height, width), dtype=np.int32)
             face_ids_tensor = torch.from_numpy(face_ids).to(self.device)
+            
+            # Clean up ModernGL resources
             fbo.release()
+            color_texture.release()
+            depth_texture.release()
+            
             return face_ids_tensor
         
         # Check if anything was rendered
@@ -295,41 +303,54 @@ class MeshDistiller:
         face_ids = (r << 16) | (g << 8) | b
         
         face_ids_tensor = torch.from_numpy(face_ids).to(self.device)
+        
+        # Clean up ModernGL resources
         fbo.release()
+        color_texture.release()
+        depth_texture.release()
         
         return face_ids_tensor
 
-    def get_face_pixel_mapping(self, face_ids: torch.Tensor) -> Dict[int, torch.Tensor]:
+    def aggregate_features_vectorized(self, face_ids: torch.Tensor, features: torch.Tensor, 
+                                    face_features: torch.Tensor, face_weights: torch.Tensor) -> None:
         """
-        Convert face ID image to face -> pixel coordinates mapping.
+        Vectorized feature aggregation directly from face IDs without explicit pixel mapping.
+        Much faster than the original get_face_pixel_mapping + loop approach.
         """
-        face_pixel_map = {}
         height, width = face_ids.shape
+        C, H, W = features.shape
         
-        # Create coordinate grids
-        y_coords, x_coords = torch.meshgrid(
-            torch.arange(height, device=self.device, dtype=torch.float32),
-            torch.arange(width, device=self.device, dtype=torch.float32),
-            indexing='ij'
-        )
+        # Flatten face_ids and features for vectorized operations
+        face_ids_flat = face_ids.flatten()  # [H*W]
+        features_flat = features.view(C, -1).T  # [H*W, C]
         
-        # Get unique face IDs (excluding background = 0)
-        unique_faces = torch.unique(face_ids)
-        unique_faces = unique_faces[unique_faces > 0]  # Remove background
+        # Remove background pixels (face_id = 0)
+        valid_mask = face_ids_flat > 0
+        if not valid_mask.any():
+            return  # No valid faces in this image
         
-        for face_id in unique_faces:
-            # Find pixels belonging to this face
-            mask = face_ids == face_id
-            if mask.any():
-                face_pixels = torch.stack([x_coords[mask], y_coords[mask]], dim=1)
-                # Convert face ID back to 0-based indexing (subtract 1 since we start from 1)
-                actual_face_id = face_id.item() - 1
-                face_pixel_map[actual_face_id] = face_pixels
+        valid_face_ids = face_ids_flat[valid_mask]  # [N_valid]
+        valid_features = features_flat[valid_mask]  # [N_valid, C]
         
-        return face_pixel_map
+        # Convert to 0-based indexing (subtract 1 since face IDs start from 1)
+        face_indices = (valid_face_ids - 1).long()  # [N_valid] - convert to int64 for scatter_add
+        
+        # Normalize features
+        valid_features = F.normalize(valid_features, p=2, dim=-1)
+        
+        # Use scatter_add for efficient aggregation
+        # This accumulates features for each face index
+        face_features.scatter_add_(0, face_indices.unsqueeze(1).expand(-1, C), valid_features)
+        
+        # Count pixels per face using scatter_add with ones
+        pixel_counts = torch.ones(valid_face_ids.shape[0], device=self.device, dtype=face_weights.dtype)
+        face_weights.scatter_add_(0, face_indices, pixel_counts)
+        
+        # Clean up all intermediate tensors
+        del pixel_counts, valid_face_ids, face_indices, valid_features, face_ids_flat, features_flat, valid_mask
 
     def sample_features_at_pixels(self, features: torch.Tensor, pixel_coords: torch.Tensor) -> torch.Tensor:
-        """Sample features at specific pixel coordinates."""
+        """Sample features at specific pixel coordinates. (Legacy method - kept for compatibility)"""
         # features: [C, H, W]
         # pixel_coords: [N, 2] (x, y coordinates)
         
@@ -345,6 +366,8 @@ class MeshDistiller:
         
         return sampled_features
 
+    # def get_face_pixel_mapping(self, face_ids: torch.Tensor) -> Dict[int, torch.Tensor]:
+    #     \"\"\"\n        Convert face ID image to face -> pixel coordinates mapping.\n        NOTE: This is the old slow method, kept for debugging. Use aggregate_features_vectorized() instead.\n        \"\"\"\n        face_pixel_map = {}\n        height, width = face_ids.shape\n        \n        # Create coordinate grids\n        y_coords, x_coords = torch.meshgrid(\n            torch.arange(height, device=self.device, dtype=torch.float32),\n            torch.arange(width, device=self.device, dtype=torch.float32),\n            indexing='ij'\n        )\n        \n        # Get unique face IDs (excluding background = 0)\n        unique_faces = torch.unique(face_ids)\n        unique_faces = unique_faces[unique_faces > 0]  # Remove background\n        \n        for face_id in unique_faces:\n            # Find pixels belonging to this face\n            mask = face_ids == face_id\n            if mask.any():\n                face_pixels = torch.stack([x_coords[mask], y_coords[mask]], dim=1)\n                # Convert face ID back to 0-based indexing (subtract 1 since we start from 1)\n                actual_face_id = face_id.item() - 1\n                face_pixel_map[actual_face_id] = face_pixels\n        \n        return face_pixel_map
 
     @torch.no_grad()
     def distill(self) -> None:
@@ -394,31 +417,12 @@ class MeshDistiller:
             # Render face IDs using ModernGL
             face_ids = self.render_face_ids(viewmat, K, height, width)
             
-            # Get face -> pixel mapping
-            face_pixel_map = self.get_face_pixel_mapping(face_ids)
+            # Vectorized feature aggregation (much faster than the old approach)
+            self.aggregate_features_vectorized(face_ids, features, face_features, face_weights)
             
-            # Process each visible triangle
-            for face_idx, pixel_coords in face_pixel_map.items():
-                num_pixels = len(pixel_coords)
-                
-                if num_pixels == 0:
-                    continue
-                
-                # Sample features at pixels covered by this triangle
-                sampled_features = self.sample_features_at_pixels(features, pixel_coords)
-                
-                # Normalize features
-                sampled_features = F.normalize(sampled_features, p=2, dim=-1)
-                
-                # Average features across pixels in this triangle
-                triangle_feature = sampled_features.mean(dim=0)
-                
-                # Weight by number of pixels (more pixels = more reliable feature)
-                pixel_weight = float(num_pixels)
-                
-                # Accumulate weighted features
-                face_features[face_idx] += triangle_feature * pixel_weight
-                face_weights[face_idx] += pixel_weight
+            # Explicit cleanup of GPU tensors
+            del features, face_ids, camtoworlds, Ks, pixels
+            torch.cuda.empty_cache()  # Force GPU memory cleanup
         
         # Normalize accumulated features
         face_weights = torch.clamp(face_weights, min=1e-8)
