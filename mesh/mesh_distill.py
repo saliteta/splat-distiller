@@ -259,7 +259,7 @@ class MeshDistiller:
             self.face_id_program['mvp'].write(mvp_matrix.T.tobytes())
             self.face_id_program['base_face_id'].value = 1  # Start face IDs from 1 (0 = background)
             self.vao = self.face_id_vao
-            debug_filename = "debug_face_ids.png"
+            debug_filename = "../debug_face_ids.png"
         
         fbo.use()
         self.ctx.viewport = (0, 0, width, height)
