@@ -39,9 +39,8 @@ __global__ void reverse_rasterize_to_gaussians_2dgs_kernel(
     // map blocks: x=cam, y=tile_row, z=tile_col
     auto block = cg::this_thread_block();
     int cam = block.group_index().x;
-    int tile_row = block.group_index().y;
-    int tile_col = block.group_index().z;
-    int tile_id = tile_row * tile_width + tile_col;
+    int32_t tile_id =
+        block.group_index().y * tile_width + block.group_index().z;
     uint32_t i = block.group_index().y * tile_size + block.thread_index().y;
     uint32_t j = block.group_index().z * tile_size + block.thread_index().x;
 
@@ -57,7 +56,7 @@ __global__ void reverse_rasterize_to_gaussians_2dgs_kernel(
     int num_batches = (range_end - range_start + block_size - 1) / block_size;
 
     bool inside = (i < image_height && j < image_width);
-     bool done = !inside;
+    bool done = !inside;
 
     // Shared memory: load Gaussian IDs and parameters
     extern __shared__ int s[];
@@ -184,7 +183,7 @@ __global__ void reverse_rasterize_to_gaussians_2dgs_kernel(
 
 #pragma unroll
             for (int k = 0; k < CDIM; ++k) {
-                atomicAdd(&gauss_features[g*CDIM + k], pixel_color[k] * vis);
+                atomicAdd(&gauss_features[g*CDIM + k], pixel_color[k] * vis * vis);
             }
             atomicAdd(&gauss_weights[g], vis * vis);
 

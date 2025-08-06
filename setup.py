@@ -2,15 +2,17 @@ import os
 from setuptools import setup, find_packages, Command
 from setuptools.command.install import install
 import subprocess
+import sys
 
 install_requires = [
     # Git dependencies
     "pycolmap @ git+https://github.com/rmbrualla/pycolmap@cc7ea4b7301720ac29287dbe450952511b32125e",
-    "fused-ssim @ git+https://github.com/rahul-goel/fused-ssim@1272e21a282342e89537159e4bad508b19b34157",
+    "fused-ssim @ git+https://github.com/rahul-goel/fused-ssim.git@main",
     "FeatUp @ git+https://github.com/opipari/FeatUp.git@main",
     "CLIP @ git+https://github.com/mhamilton723/CLIP.git@main",
     # PyPI dependencies
     "viser",
+    "open_clip_torch",
     "nerfview @ git+https://github.com/RongLiu-Leo/nerfview.git",
     "imageio[ffmpeg]",
     "ninja",
@@ -36,6 +38,8 @@ install_requires = [
     "pandas",
     "tabulate",
     "black[jupyter]==22.3.0",
+    "hydra-core",
+    "omegaconf",
 ]
 
 
@@ -63,6 +67,9 @@ class BuildSubmodule(Command):
         subprocess.check_call(
             ["pip", "install", "."], cwd=os.path.join(submodule_path, "gsplat_ext")
         )
+        subprocess.check_call(
+            ["pip", "install", "."], cwd=os.path.join(submodule_path, "segment-anything-langsplat")
+        )
 
 
 class CustomInstall(install):
@@ -73,6 +80,7 @@ class CustomInstall(install):
         self.run_command("build_submodule")
         # Then proceed with the standard installation of the main project
         install.run(self)
+
 
 
 setup(
