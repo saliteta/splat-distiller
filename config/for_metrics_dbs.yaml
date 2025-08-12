@@ -23,7 +23,7 @@ skip:
 feature_extraction:
     method: "SAMOpenCLIP" # one of [maskclip, SAMOpenCLIP]
     folder: "SAMOpenCLIP_features"
-
+    sam_ckpt_path: "/home/bxiong/workspace/LaGa/sam_vit_h_4b8939.pth"
 
 # Training settings
 training:
@@ -35,11 +35,12 @@ training:
 
 # Distillation settings
 distillation:
-    quantize: False
-    filter: True
+    quantize: True
+    tikhonov: 1.0
 
 
 # Evaluation settings
 evaluation:
     rendering_mode: "RGB+AttentionMap+VIS"
     metrics: "attention_map"
+    tikhonov: 1.0
