@@ -36,6 +36,7 @@ if __name__ == "__main__":
     ModelParams(parser), ViewerParams(parser)
     parser.add_argument("--ply", type=str, default=None, help="path to the .ply file")
     parser.add_argument("--png", type=str, default=None, help="path to the png folder")
+    parser.add_argument("--ckpt", type=str, default=None, help="path to the ckpt file")
 
     args = parser.parse_args()
 

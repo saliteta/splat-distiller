@@ -22,8 +22,8 @@ namespace gsplat_ext {
         const uint32_t image_width,
         const uint32_t image_height,
         const uint32_t tile_size,
-        const uint32_t tile_height,
         const uint32_t tile_width,
+        const uint32_t tile_height,
 
         const vec2 *__restrict__ means2d, // [C, N, 2] or [nnz, 2]
         const vec3 *__restrict__ conics,  // [C, N, 3] or [nnz, 3]
@@ -112,7 +112,6 @@ namespace gsplat_ext {
 
             // wait for other threads to collect the gaussians in batch
             block.sync();
-
             // process gaussians in the current batch for this pixel
             uint32_t batch_size = min(block_size, range_end - batch_start);
             for (uint32_t t = 0; (t < batch_size) && !done; ++t) {

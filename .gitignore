@@ -17,3 +17,6 @@ results
 /debugging
 /debugging_no_miou
 application_beta/test_folderassets/display_file.mp4
+application_beta/test_folder
+application_beta/semantic_query/__pycache__
+.hydra

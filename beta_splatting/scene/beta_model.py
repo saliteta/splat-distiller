@@ -146,7 +146,7 @@ class BetaModel:
     def get_shs(self):
         sh0 = self._sh0
         shN = self._shN
-        return torch.cat((sh0, shN), dim=1)
+        return torch.cat((sh0.cuda(), shN.cuda()), dim=1)
 
     @property
     def get_sb_params(self):
@@ -864,6 +864,7 @@ class BetaModel:
     @torch.no_grad()
     def view(self, camera_state, render_tab_state):
         """Callable function for the viewer."""
+
         assert isinstance(render_tab_state, BetaRenderTabState)
         if render_tab_state.preview_render:
             W = render_tab_state.render_width

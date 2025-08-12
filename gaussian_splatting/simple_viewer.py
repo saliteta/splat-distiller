@@ -14,8 +14,7 @@ from gsplat.rendering import rasterization
 from nerfview import CameraState, RenderTabState, apply_float_colormap
 from gsplat_viewer import GsplatViewer, GsplatRenderTabState
 from sklearn.decomposition import PCA
-from text_encoder import TextEncoder
-from primitives import DrSplatPrimitive, GaussianPrimitive
+from gsplat_ext import DrSplatPrimitive, GaussianPrimitive, TextEncoder
 
 def main(local_rank: int, world_rank, world_size: int, args):
     torch.manual_seed(42)
@@ -229,3 +228,7 @@ if __name__ == "__main__":
     assert args.scene_grid % 2 == 1, "scene_grid must be odd"
 
     cli(main, args, verbose=True)
+
+
+
+

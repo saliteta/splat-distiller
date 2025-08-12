@@ -324,6 +324,8 @@ def rasterization(
         ) = proj_results
         opacities = opacities[primitive_ids]  # [nnz]
         betas = betas[primitive_ids]  # [nnz]
+        if sb_params is not None:
+            sb_params = sb_params[primitive_ids, :, :]
     else:
         # The results are with shape [C, N, ...]. Only the elements with radii > 0 are valid.
         radii, means2d, depths, conics, compensations = proj_results
@@ -398,8 +400,6 @@ def rasterization(
         if render_mode != "Specular":
             colors = torch.clamp_min(colors + 0.5, 0.0)
         if sb_number:
-            if sb_params.dim() == 3:
-                sb_params = sb_params.expand(C, -1, -1, -1)
             if render_mode == "Diffuse":
                 sb_params = torch.cat(
                     [
@@ -408,6 +408,7 @@ def rasterization(
                     ],
                     -1,
                 )
+
             colors = spherical_beta(
                 sb_number, dirs, colors, sb_params, masks=masks
             )  # [C, N, 3]

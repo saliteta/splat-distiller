@@ -23,8 +23,6 @@ from tqdm import tqdm
 
 
 
-
-
 def load_evaluator(rendering_args: RenderingArgs, metrics_args: MetricsArgs):
     # Initialize parser and dataset
     parser = Parser(

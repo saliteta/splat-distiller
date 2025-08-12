@@ -3,6 +3,7 @@ from .rasterization import (
     inverse_rasterization_3dgs,
     inverse_rasterization_dbs,
 )
+from .datasets.normalize import *
 from .datasets.colmap import Parser, Dataset
 from .datasets.traj import *
 from .utils.primitives import *
