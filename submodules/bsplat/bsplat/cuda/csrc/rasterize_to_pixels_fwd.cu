@@ -153,7 +153,7 @@ __global__ void rasterize_to_pixels_fwd_kernel(
             }
 
             S alpha = min(0.999f, opac * __powf(1.f - sigma, beta));
-            
+
             const S next_T = T * (1.0f - alpha);
             if (next_T <= 1e-4) { // this pixel is done: exclusive
                 done = true;

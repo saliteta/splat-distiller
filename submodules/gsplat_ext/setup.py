@@ -103,8 +103,9 @@ def get_ext():
 
 setup(
     name="gsplat_ext",
-    version="0.3",
-    description=" Python package for reverse calculation of the weight of each Gaussian",
+    version="0.4",
+    description=" Python package for reverse calculation of the weight of each Gaussian, including 2DGS, 3DGS, and BetaSplat \
+        as well as feature visualization and attention map visualization",
     keywords="gaussian, splatting, cuda",
     python_requires=">=3.7",
     install_requires=[
