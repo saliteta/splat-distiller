@@ -104,7 +104,7 @@ python convert.py -s <location>
 
 
 
-#### 2. Extract features via FeatUp
+#### 2. Extract features via FeatUp or SAMOpenCLIP
 ```shell
 python feature_extractor.py -s <location> --model <model> --sam_ckpt_path <if use SAMOpenCLIP>
 ```
@@ -121,6 +121,26 @@ python feature_extractor.py -s <location> --model <model> --sam_ckpt_path <if us
 </details>
 <br>
 
+
+#### 3. Feature Lifting
+```shell
+python distill.py --method {3DGS, 2DGS, or DBS} --ckpt {place hold the pretrained model, currently support .ply(inria/dbs) .ckpt(gsplat)} --dir {colmap folder} --feature_folder {sub folder e.g. SAMOpenCLIP_features} --quantize {if use post lifting aggregation} --tikhonove {lambda parameters, around 1 to 1.2, one means no tikhonov}
+```
+
+#### 4. Visualization
+```shell
+python general_viewer.py --ckpt {place hold the pretrained model, currently support .ply(inria/dbs) .ckpt(gsplat)}  --splat_method {3DGS, 2DGS, or DBS} --feature_ckpt {feature location in absolute path} --text_encoder {SAMOpenCLIP, SAM2OpenCLIP, ...}
+```
+
+#### Expected Output
+We support RGB, Feature PCA, and Attention Map Rendering for now. One can also do the segmentation by use the segmentation bottom. We also support 2DGS, 3DGS, and DBS
+
+<table>
+  <tr>
+    <td><img src="assets/segmentation.png" Height="300"/></td>
+    <td><img src="assets/query.png" Height="300"/></td>
+  </tr>
+</table>
 
 ### Evaluation Scripts
 ```
@@ -159,7 +179,7 @@ There are some examples:
 left one are the feature PCA, and the right one is the metrics image
 
 
-### Visualization and Query in 3D
+### Visualization and Query in 3D (Older Viewer, only support 3DGS, no segmentation, but more visualization mode, such as depth...)
 To visualize and query in 3D, one can do the following. If one is using 3DGS 
 cd gaussian_spaltting
 python simple_viewer.py --ckpt {in the ckpt folder, there is a ckpt_29999} --feature_ckpt {optional, default is ckpt_29999_feature at the same folder}
