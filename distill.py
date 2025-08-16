@@ -83,20 +83,7 @@ class Runner:
 
         self.splats.to(self.device)
 
-        if distill_args.filter:
-            filter_set = Dataset(self.parser, split="train")
-            filter_loader = torch.utils.data.DataLoader(
-                filter_set, batch_size=1, shuffle=False
-            )
-            masks = self.splats.filtering(
-                filter_loader,
-                self.splats.geometry["means"],
-                torch.device(self.device),
-                threshold=0.8,
-                args=beta_filter_args if distill_args.method == "DBS" else None,
-            )
-            ckpt_path = Path(distill_args.ckpt)
-            self.splats.save(ckpt_path.parent / (ckpt_path.stem + "_filtered.pt"))
+
 
     def quantize(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -200,10 +187,6 @@ class Runner:
         torch.cuda.empty_cache()
 
         self.basename, _ = os.path.splitext(distill_args.ckpt)
-        if distill_args.filter:
-            torch.save(self.splat_features, self.basename + "_filtered_features.pt")
-        else:
-            torch.save(self.splat_features, self.basename + "_features.pt")
         
         self.splat_features = self.splat_features.cpu()
 
@@ -214,12 +197,37 @@ class Runner:
             if 'SAMOpenCLIP' in data_args.feature_folder:
                 print("Detecting Using SAMOpenCLIP, apply refinement ...")
                 image_labels: Dict[str, torch.Tensor] = self.label_projection(self.labels)
-                del self.splats
+                self.splats.to("cpu")
                 torch.cuda.empty_cache()
-                refined = self.mask_level_refinement(data_args, image_labels)
-                torch.save(refined, self.basename + "_refined_features.pt")
+                self.splat_features = self.mask_level_refinement(data_args, image_labels).to('cpu')
+
+        if distill_args.filter != -1:
+            self.splats.to("cuda")
+            filter_set = Dataset(self.parser, split="train")
+            filter_loader = torch.utils.data.DataLoader(
+                filter_set, batch_size=1, shuffle=False
+            )
+            masks = self.splats.filtering(
+                filter_loader,
+                self.splats.geometry["means"],
+                torch.device(self.device),
+                threshold=distill_args.filter,
+                args=None,
+            )
+            ckpt_path = Path(distill_args.ckpt)
+            self.splats.mask(masks)
+            self.splats.save(ckpt_path.parent / (ckpt_path.stem + "_filtered.pt"))
+            self.splat_features = self.splat_features.cuda()[masks]
 
 
+        if distill_args.filter != -1 and distill_args.quantize == "True":
+            torch.save(self.splat_features, self.basename + "_filtered_refined_features.pt")
+        elif distill_args.filter != -1:
+            torch.save(self.splat_features, self.basename + "_filtered_features.pt")
+        elif distill_args.quantize == "True":
+            torch.save(self.splat_features, self.basename + "_refined_features.pt")
+        else:
+            torch.save(self.splat_features, self.basename + "_features.pt")
     
     def mask_level_refinement(self, data_args: DataArgs, image_labels: Dict[str, torch.Tensor]):
         mask_folder = Path(data_args.dir) / data_args.feature_folder 

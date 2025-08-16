@@ -97,8 +97,7 @@ class GeneralViewer(Viewer):
         K = torch.from_numpy(K).float().to('cuda').unsqueeze(0)
         return K, c2w, width, height
 
-
-    @abstractmethod
+    @torch.no_grad()
     def render_function(self, camera_state: CameraState, render_tab_state: ViewerState):
         state = self.render_tab_state
         K, c2w, width, height = self.camera_state_parser(camera_state, render_tab_state)

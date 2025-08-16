@@ -128,9 +128,9 @@ class GaussianPrimitive(Primitive):
         self._source_data = {}
     
     def from_file(self, file_path: Union[str, Path], feature_path: Optional[Union[str, Path]] = None, args: Optional[dict] = None, tikhonov: Union[float, None] = None) -> None:
-        if file_path.endswith(".ply"):
+        if str(file_path).endswith(".ply"):
             self._load_ply(file_path, tikhonov=tikhonov, args=args)
-        elif file_path.endswith(".pt"):
+        elif str(file_path).endswith(".pt"):
             self._from_ckpt(file_path, tikhonov=tikhonov, args=args)
         else:
             raise ValueError(f"Unsupported file type: {file_path}")
@@ -376,8 +376,8 @@ class GaussianPrimitive(Primitive):
         splat_mask = torch.topk(
             splat_weights, k=int(splat_weights.shape[0] * threshold), dim=0
         )[1]
-        self.mask(splat_mask)
-        return splat_mask.squeeze(-1)
+        splat_mask = splat_mask.squeeze(-1)
+        return splat_mask
 
 
 class DrSplatPrimitive(GaussianPrimitive):
@@ -706,39 +706,6 @@ class BetaSplatPrimitive(GaussianPrimitive):
                 self._from_dbs_ckpt(file_path, feature_path)
         else:
             raise ValueError(f"Unsupported file type: {Path(file_path).suffix}")
-
-    def filtering(
-        self,
-        trainloader: torch.utils.data.DataLoader,
-        means: torch.Tensor,
-        device: torch.device,
-        threshold: float = 0.2,
-        args: Optional[dict] = None,
-    ) -> torch.Tensor:
-        """
-        Filtering the splats that is not in the center of the image
-        This is a simple way to filter the splats that is not in the center of the image
-        Although it is very trivial, but it align with the user request for reconstructing
-        objects and fast segmentation. For example, fast 3D assets generation.
-        """
-
-        if args is None:
-            return super().filtering(trainloader, means, device, threshold)
-
-        if "space_filter" in args.keys():
-            super().filtering(trainloader, means, device, threshold)
-
-        if "beta_filter_small" in args.keys():
-            threshold = args["beta_filter_small"]
-            mask = self.color["beta"] > threshold
-            self.mask(mask)
-
-        if "beta_filter_large" in args.keys():
-            threshold = args["beta_filter_large"]
-            mask = self.color["beta"] < threshold
-            self.mask(mask)
-
-        return self._geometry["means"]
 
 
 __all__ = [

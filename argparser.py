@@ -16,8 +16,8 @@ class DataArgs:
 class DistillArgs:
     method: str
     ckpt: str
-    filter: bool
     quantize: bool
+    filter: float = -1
     tikhonov: float = 1
 
 @dataclass
@@ -54,7 +54,7 @@ def build_parser():
     distill_args = parser.add_argument_group("Distill Args")
     distill_args.add_argument("--method", type=str, default="3DGS", help="The method to use for the splatting, default is 3DGS", choices=["3DGS", "2DGS", "DBS"])
     distill_args.add_argument("--tikhonov", type=float, default=None, help="Tikhonov regularization parameter")
-    distill_args.add_argument("--filter", type=bool, default=False, help="Filter the splats that is not in the center of the image, default is False")
+    distill_args.add_argument("--filter", type=float, default=-1, help="Filter the splats that is not in the center of the image, default is False")
     distill_args.add_argument("--quantize", type=str, default="False", help="Quantize the features to the prototypes, default is False", choices=["True", "False"])
     
     args = parser.parse_args()
