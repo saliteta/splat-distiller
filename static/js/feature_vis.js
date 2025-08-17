@@ -3,8 +3,12 @@ const seg = (s) => encodeURIComponent(s ?? "");
 
 // If there is a mapping for a local path, return the HLS URL; else return the local path.
 function mapOrLocal(localPath) {
-  const m = (window.VIDEO_MAP || {});
-  return m[localPath];
+  const url = (window.VIDEO_MAP || {})[localPath];
+  if (!url) {
+    console.warn('[VIDEO_MAP] missing key:', localPath);
+    return null;   // <- important: do NOT return localPath
+  }
+  return url;
 }
 
 // Build path per instance (A vs B)
