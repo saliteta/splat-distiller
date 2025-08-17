@@ -1,13 +1,9 @@
 # Splat Distiller: One-pass distillation of 2D foundation models into 3D splats
 
 ## Quickstart
-You can also access this link: [https://drive.google.com/file/d/1-LYFOgGrm82BCYSEg4ZbS48Ff2neaCDr/view?usp=sharing](https://drive.google.com/file/d/1zl4lu2i8z7scMlHMQA4yZef7t_wSRCF2/view?usp=sharing)
 <p align="center">
-  <iframe
-    src="https://drive.google.com/file/d/1zl4lu2i8z7scMlHMQA4yZef7t_wSRCF2/preview"
-    width="640" height="360"
-    allow="autoplay; encrypted-media"
-    allowfullscreen>
+  <iframe width="640" height="360" src="https://www.youtube.com/embed/CH-G5hbvArM" 
+    title="Splat Distiller Demo" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen>
   </iframe>
 </p>
 
