@@ -2,9 +2,9 @@
 
 ## Quickstart
 <p align="center">
-  <iframe width="640" height="360" src="https://www.youtube.com/embed/CH-G5hbvArM" 
-    title="Splat Distiller Demo" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen>
-  </iframe>
+  <a href="https://www.youtube.com/watch?v=CH-G5hbvArM">
+    <img src="https://img.youtube.com/vi/CH-G5hbvArM/0.jpg" alt="Splat Distiller Demo" width="640">
+  </a>
 </p>
 
 
