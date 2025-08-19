@@ -11,7 +11,19 @@
   <a href="https://github.com/saliteta/splat-distiller/blob/main/LICENSE">
     <img alt="License" src="https://img.shields.io/github/license/saliteta/splat-distiller">
   </a>
+  <a href="https://splat-distiller.pages.dev/">
+    <img alt="Website" src="https://img.shields.io/badge/Project%20Page-Online-blue?logo=google-chrome">
+  </a>
 </p>
+
+## 📄 Paper
+
+This repository contains the official implementation of our paper:
+
+> **Splat Feature Solver**  
+> [arXiv:2508.12216](https://arxiv.org/abs/2508.12216)
+
+If you find this code useful, please consider citing our work.
 
 ## Quickstart
 - TO DO: Tutorial Uploading Before Augsut 20
@@ -252,3 +264,19 @@ python benchmark.py
     <td><img src="assets/viwereggs_sam+clip.png"width="300"/></td>
   </tr>
 </table>
+
+
+## 📚 Citation
+
+If you use this code or paper in your research, please cite:
+
+```bibtex
+@misc{xiong2025splatfeaturesolver,
+    title={Splat Feature Solver}, 
+    author={Butian Xiong and Rong Liu and Kenneth Xu and Meida Chen and Andrew Feng},
+    year={2025},
+    eprint={2508.12216},
+    archivePrefix={arXiv},
+    primaryClass={cs.CV},
+    url={https://arxiv.org/abs/2508.12216}, 
+}
