@@ -1,5 +1,18 @@
 # Splat Distiller: One-pass distillation of 2D foundation models into 3D splats
 
+
+<p align="center">
+  <a href="https://arxiv.org/abs/2508.12216">
+    <img alt="arXiv" src="https://img.shields.io/badge/arXiv-2508.12216-b31b1b">
+  </a>
+  <a href="https://github.com/saliteta/splat-distiller/stargazers">
+    <img alt="GitHub stars" src="https://img.shields.io/github/stars/saliteta/splat-distiller?style=social">
+  </a>
+  <a href="https://github.com/saliteta/splat-distiller/blob/main/LICENSE">
+    <img alt="License" src="https://img.shields.io/github/license/saliteta/splat-distiller">
+  </a>
+</p>
+
 ## Quickstart
 <p align="center">
   <a href="https://www.youtube.com/watch?v=CH-G5hbvArM">
