@@ -1,11 +1,8 @@
-# Splat Distiller: One-pass distillation of 2D foundation models into 3D splats
+# Splat Feature Solver
 
 ## Quickstart
-<p align="center">
-  <iframe width="640" height="360" src="https://www.youtube.com/embed/CH-G5hbvArM" 
-    title="Splat Distiller Demo" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen>
-  </iframe>
-</p>
+- TO DO: Tutorial Uploading Before Augsut 20
+- User Simplified Version: August 22TH
 
 
 This project is built on top of the [gaussian-splatting](https://github.com/graphdeco-inria/gaussian-splatting), [gsplat](https://github.com/nerfstudio-project/gsplat), [beta-splatting](https://github.com/RongLiu-Leo/beta-splatting), [LAGA](https://github.com/SJTU-DeepVisionLab/LaGa)and [Featup](https://github.com/mhamilton723/FeatUp) code bases. The authors are grateful to the original authors for their open-source codebase contributions.
