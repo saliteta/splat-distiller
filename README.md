@@ -15,7 +15,7 @@
     <img alt="Website" src="https://img.shields.io/badge/Project%20Page-Online-blue?logo=google-chrome">
   </a>
 
-  <a href="https://www.bilibili.com/video/BV1DpYSz4EQc/>
+  <a href="https://www.bilibili.com/video/BV1DpYSz4EQc/">
     <img alt="Bilibili" src="https://img.shields.io/badge/Bilibili-Tutorial-ff69b4?logo=bilibili">
   </a>
   <a href="https://youtu.be/OXO_fdPNuUc">
