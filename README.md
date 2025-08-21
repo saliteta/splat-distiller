@@ -14,7 +14,17 @@
   <a href="https://splat-distiller.pages.dev/">
     <img alt="Website" src="https://img.shields.io/badge/Project%20Page-Online-blue?logo=google-chrome">
   </a>
+
+  <a href="https://www.bilibili.com/video/BV1DpYSz4EQc/>
+    <img alt="Bilibili" src="https://img.shields.io/badge/Bilibili-Tutorial-ff69b4?logo=bilibili">
+  </a>
+  <a href="https://youtu.be/OXO_fdPNuUc">
+    <img alt="YouTube" src="https://img.shields.io/badge/YouTube-Tutorial-red?logo=youtube">
+  </a>
+
 </p>
+
+
 
 ## 📄 Paper
 
@@ -26,7 +36,9 @@ This repository contains the official implementation of our paper:
 If you find this code useful, please consider citing our work.
 
 ## Quickstart
-- TO DO: Tutorial Uploading Before Augsut 20
+- Simple Tutorial can be found in the above Bilibili badge and YouTube badge, or directly via the following links:
+  - [Bilibili Tutorial](https://www.bilibili.com/video/BV1DpYSz4EQc) (Chinese)
+  - [YouTube Tutorial](https://youtu.be/OXO_fdPNuUc) (English)
 - User Simplified Version: August 22TH
 
 
