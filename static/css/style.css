@@ -163,12 +163,47 @@ code, pre {
     width: 100%;
     height: 100%;
 }
+/* Remove the heavy-handed rule and use themed variables instead */
 @media (prefers-color-scheme: dark) {
-  html, body, *, *::before, *::after {
-    background-color: white !important;
+  body {
+    --background-color: #0b0e12;
+    --primary-color: #e6e9ef;
+    --accent-color: #8ab4f8;
+    --link-color: #8ab4f8;
+  }
+
+  .compare-overlap { background: #000; }
+  .controls { background: rgba(0,0,0,0.45); }
+
+  /* Make selects legible in dark mode */
+  .controls select {
+    background: rgba(30,30,30,0.85);
+    color: #fff;
+    border-color: rgba(255,255,255,0.3);
+  }
+  /* Some browsers honor option styling; harmless where ignored */
+  .controls select option {
+    background: #1e1e1e;
+    color: #fff;
+  }
+} 
+
+@media (prefers-color-scheme: dark) {
+  .nav.nav-tabs .nav-link {
+    background: #1f2430;      /* dark chip for inactive tabs */
+    color: #e6e9ef;
+    border-color: #323844;
+  }
+  .nav.nav-tabs .nav-link:not(.active):hover {
+    background: #2a3140;
+    color: #fff;
+  }
+  .nav-tabs .nav-link.active {
+    background-color: #b3212e; /* active red tuned for dark bg */
+    border-color: #b3212e;
+    color: #fff;
   }
 }
-
 
 .compare-overlap {
   position: relative;
