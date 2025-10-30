@@ -1,0 +1,4 @@
+[submodule "submodules/gsplat_ext"]
+	path = submodules/gsplat_ext
+	url = https://github.com/saliteta/gsplat_ext.git
+	branch = main
