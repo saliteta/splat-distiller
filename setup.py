@@ -10,10 +10,11 @@ install_requires = [
     "fused-ssim @ git+https://github.com/rahul-goel/fused-ssim.git@main",
     "FeatUp @ git+https://github.com/opipari/FeatUp.git@main",
     "CLIP @ git+https://github.com/mhamilton723/CLIP.git@main",
+    "nerfview @ git+https://github.com/RongLiu-Leo/nerfview.git",
+    "plas @ git+https://github.com/fraunhoferhhi/PLAS.git",
     # PyPI dependencies
     "viser",
     "open_clip_torch",
-    "nerfview @ git+https://github.com/RongLiu-Leo/nerfview.git",
     "imageio[ffmpeg]",
     "ninja",
     "numpy<2.0.0",
@@ -34,12 +35,12 @@ install_requires = [
     "torch",
     "typing_extensions; python_version<'3.8'",
     "splines",
-    "plas @ git+https://github.com/fraunhoferhhi/PLAS.git",
     "pandas",
     "tabulate",
     "black[jupyter]==22.3.0",
     "hydra-core",
     "omegaconf",
+    "tyro",
 ]
 
 
