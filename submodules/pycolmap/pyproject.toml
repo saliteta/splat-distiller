@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pycolmap"
+version = "0.0.1"
+dependencies = [
+    "numpy",
+    "scipy",
+]
+authors = [
+    {name = "Ricardo Martin-Brualla"},
+]
+description = "A Python API for reading and writing COLMAP-generated files."
+
+license = {file = "LICENSE.txt"}
+readme = "README.md"
+
